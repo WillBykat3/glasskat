@@ -11,6 +11,7 @@ Open `index.html` in any browser. There's no build step, and the only outside fi
 - **Boxes mode** (B): drag across squares to make a pane, or tap squares one at a time and press **Make pane** (Enter). Tap a coloured pane to undo it.
 - **Lines mode** (L): drag along the grid lines to draw walls. Drag over walls to erase them, or tap a line to toggle it.
 - **Z** undoes. **Clear** wipes the board. **New** gives a different board at the same level.
+- **Hint** (H) fills in one pane of an answer. Solves that used hints say so in your results.
 - Every board can be solved. It's built by laying down panes that already follow the rules. Some boards have more than one answer, and any answer that follows every rule wins.
 - Your level and the puzzle you're in the middle of are saved in this browser, even without an account.
 

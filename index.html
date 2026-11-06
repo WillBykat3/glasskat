@@ -162,6 +162,7 @@
     </div>
     <div class="actions">
       <button class="btn primary" id="makePane">Make pane</button>
+      <button class="btn" id="hint" title="Fill in one pane of an answer (H)">Hint</button>
       <button class="btn" id="undo" title="Undo (Z)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>Undo</button>
       <button class="btn" id="clear" title="Clear the board">Clear</button>
       <button class="btn" id="skip" title="Skip to a new board at this level">New</button>
@@ -354,7 +355,7 @@ function generate(def) {
 let level = 1, cells = [], cellSet = new Set(), W = 0, H = 0, rules = [], solution = [];
 let walls = new Set(), history = [], regions = [], regionOf = new Map(), evalState = null;
 let mode = store.get("gk-mode") === "lines" ? "lines" : "boxes";
-let elapsed = 0, startedAt = 0, solvedFlag = false;
+let elapsed = 0, startedAt = 0, solvedFlag = false, hints = 0;
 
 // edge ids: "x,y,r" is the wall right of square (x,y); "x,y,d" the wall below it
 const edgeR = (x, y) => `${x},${y},r`, edgeD = (x, y) => `${x},${y},d`;
@@ -427,7 +428,7 @@ function loadPuzzle(p, wallList, secs) {
   level = p.level; cells = p.cells; rules = p.rules; solution = p.solution || [];
   cellSet = new Set(cells.map((c) => key(...c)));
   W = Math.max(...cells.map((c) => c[0])) + 1; H = Math.max(...cells.map((c) => c[1])) + 1;
-  walls = new Set((wallList || []).filter(isInner)); history = []; selection = []; solvedFlag = false;
+  walls = new Set((wallList || []).filter(isInner)); history = []; selection = []; solvedFlag = false; hints = p.hints || 0;
   elapsed = secs || 0; startedAt = 0;
   shapeColor.clear(); buildRules(); resize();
   const bar = $("#bar"); bar.style.transition = "none"; changed(false); void bar.offsetWidth; bar.style.transition = "";
@@ -439,7 +440,7 @@ function newPuzzle(l) {
   loadPuzzle({ level: l, cells: g.cells, rules: g.rules, solution: g.solution }, [], 0);
   persist();
 }
-const snapshotState = () => ({ v: 1, level, cells, rules, solution, walls: [...walls], elapsed: currentElapsed(), mode });
+const snapshotState = () => ({ v: 1, level, cells, rules, solution, walls: [...walls], elapsed: currentElapsed(), mode, hints });
 function persist() { store.set("gk-state", snapshotState()); markDirty(); }
 
 /* ================= TIMER ================= */
@@ -747,12 +748,28 @@ $("#undo").onclick = undo;
 $("#clear").onclick = () => { if (!walls.size && !selection.length) return; pushHistory(); walls = new Set(); selection = []; changed(); };
 $("#skip").onclick = () => newPuzzle(level);
 
+// Hint: carve one pane of the stored answer that isn't on the board yet.
+function hint() {
+  if (!solution.length) { setHint("No hint is available for this board. Press New for a fresh one.", true); return; }
+  const keysOf = (p) => p.map((c) => key(...c));
+  const done = (p) => { const r = regionOf.get(key(...p[0])); return regions[r].length === p.length && p.every((c) => regionOf.get(key(...c)) === r); };
+  const todo = solution.filter((p) => !done(p));
+  if (!todo.length) return;
+  // prefer a pane in the unfinished space, so the hint doesn't undo work that may still be right
+  const free = todo.filter((p) => p.every((c) => !evalState.valid[regionOf.get(key(...c))]));
+  const p = pick(free.length ? free : todo);
+  hints++; carve(keysOf(p));
+  setHint(`Hint ${hints}: that pane is part of an answer.`);
+}
+$("#hint").onclick = hint;
+
 window.addEventListener("keydown", (ev) => {
   if (ev.target.closest && ev.target.closest("input")) return;
   if (modalOpen()) { if ((ev.code === "Space" || ev.code === "Enter") && $("#nextBtn")) { ev.preventDefault(); $("#nextBtn").click(); } return; }
   const k = ev.key.toLowerCase();
   if (k === "b") setMode("boxes"); else if (k === "l") setMode("lines");
   else if (k === "z" && !ev.shiftKey) undo();
+  else if (k === "h") hint();
   else if (ev.key === "Enter") makePane();
   else if (ev.key === "Escape") { selection = []; draw(); paintStatus(); }
 });
@@ -763,13 +780,13 @@ window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() =
 const modalOpen = () => !!$("#modalSlot").firstChild;
 function onSolved() {
   pauseTimer(); paintTimer();
-  const secs = currentElapsed(), result = { level, seconds: secs, panes: regions.length, squares: cells.length, rules: rules.map((r) => r.type).join("+"), mode };
+  const secs = currentElapsed(), result = { level, seconds: secs, panes: regions.length, squares: cells.length, rules: rules.map((r) => r.type).join("+"), mode: mode + (hints ? `, ${hints} hint${hints > 1 ? "s" : ""}` : "") };
   solveAnim = performance.now(); draw();
   const next = level + 1;
   store.set("gk-state", null); store.set("gk-level", Math.max(next, store.get("gk-level") || 1));
   setTimeout(() => {
     $("#modalSlot").innerHTML = `<div class="scrim"><div class="card solved" role="dialog" aria-modal="true">
-      <p style="margin:0">Level ${level} solved</p><div class="big">${fmtTime(secs)}</div>
+      <p style="margin:0">Level ${level} solved${hints ? ` · ${hints} hint${hints > 1 ? "s" : ""}` : ""}</p><div class="big">${fmtTime(secs)}</div>
       <p class="save-line" id="saveLine"></p>
       <div class="btns"><button class="btn primary" id="nextBtn">Next level <kbd style="border-color:transparent;color:inherit;opacity:.6">Space</kbd></button></div></div></div>`;
     $("#nextBtn").onclick = () => { $("#modalSlot").innerHTML = ""; newPuzzle(next); };

@@ -6,7 +6,7 @@
 <title>Glasskat</title>
 <style>
   :root { --bg:#14161f; --panel:#1f2330; --ink:#e9ecf5; --muted:#8b93ab; --accent:#7fd3ff; --ok:#6fe39a; --bad:#ff6b6b; }
-  * { box-sizing: border-box; }
+  * { box-sizing:border-box; }
   html, body { margin:0; min-height:100%; background:var(--bg); color:var(--ink);
     font:15px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif; }
   body { display:flex; flex-direction:column; align-items:center; padding:12px 16px 24px; gap:10px;
@@ -14,24 +14,23 @@
   header { display:flex; align-items:baseline; gap:14px; width:100%; max-width:640px; justify-content:space-between; }
   h1 { margin:0; font-size:22px; letter-spacing:.04em; }
   .stats { color:var(--muted); font-variant-numeric:tabular-nums; }
-  #board { display:block; max-width:100%; touch-action:none; }
-  #bank { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; max-width:640px; min-height:60px;
-    background:var(--panel); border-radius:12px; padding:10px; width:100%; }
-  #bank:empty::after { content:"All panes placed"; color:var(--muted); align-self:center; }
-  .bp { border-radius:8px; padding:4px; cursor:grab; border:2px solid transparent; touch-action:none; }
-  .bp.sel { border-color:var(--accent); }
-  .bp canvas, #drag canvas { display:block; pointer-events:none; }
-  #drag { position:fixed; left:0; top:0; pointer-events:none; z-index:5; opacity:.85; display:none; }
+  #rules { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; width:100%; max-width:640px; }
+  .rule { background:var(--panel); border:2px solid #343a4d; border-radius:10px; padding:6px 10px;
+    display:flex; align-items:center; gap:8px; font-size:14px; }
+  .rule.ok { border-color:var(--ok); } .rule.bad { border-color:var(--bad); }
+  .rule .mark { font-weight:700; width:1em; text-align:center; }
+  .rule.ok .mark { color:var(--ok); } .rule.bad .mark { color:var(--bad); }
+  .rule .shapes { display:flex; gap:6px; align-items:center; }
+  .rule canvas { display:block; }
+  #board { display:block; max-width:100%; touch-action:none; cursor:crosshair; }
+  #msg { min-height:20px; font-size:14px; color:var(--muted); text-align:center; }
   .controls { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
   button { background:var(--panel); color:var(--ink); border:1px solid #343a4d; border-radius:8px;
     padding:8px 12px; font:inherit; cursor:pointer; }
-  button:hover { border-color:var(--accent); }
-  button:disabled { opacity:.4; cursor:default; }
+  button:hover { border-color:var(--accent); } button:disabled { opacity:.4; cursor:default; }
   .help { color:var(--muted); font-size:13px; text-align:center; max-width:640px; }
   .help b { color:var(--ink); }
   kbd { background:#2a2f3e; border-radius:4px; padding:0 5px; font-size:12px; }
-  #msg { min-height:20px; font-size:14px; color:var(--muted); text-align:center; }
-  #msg.bad { color:var(--bad); } #msg.ok { color:var(--ok); }
   #overlay { position:fixed; inset:0; display:none; place-items:center; background:rgba(10,12,18,.72); z-index:10; }
   #overlay.show { display:grid; }
   #overlay .card { background:var(--panel); padding:22px 28px; border-radius:14px; text-align:center; max-width:320px; }
@@ -41,31 +40,26 @@
 <body>
 <header>
   <h1>Glasskat</h1>
-  <div class="stats">Level <span id="lvl">1</span> · <span id="left">0</span> panes in bank</div>
+  <div class="stats">Level <span id="lvl">1</span> · <span id="filled">0</span>/<span id="total">0</span> squares</div>
 </header>
 
+<div id="rules"></div>
 <canvas id="board"></canvas>
 <div id="msg"></div>
-<div id="bank"></div>
 
 <div class="controls">
-  <button id="rot">Rotate (R)</button>
-  <button id="flip">Flip (F)</button>
-  <button id="reset">Reset board</button>
-  <button id="skip">New puzzle</button>
+  <button id="undo">Undo (Z)</button>
+  <button id="clear">Clear</button>
+  <button id="skip">New board</button>
 </div>
 <div class="help">
-  <b>Fill the whole window</b> with every pane from the bank. <b>Hold and drag</b> a pane onto the frame. Tapping only selects it.
-  Drag a placed pane to move it, or drop it outside the frame to send it back.<br>
-  <b>Pins:</b> a number on a corner is the <b>total size</b> of all the panes touching that corner.
-  Each pane counts once, so a corner inside a 4-square pane reads 4.
-  Pins turn <span style="color:var(--ok)">green</span> when satisfied and <span style="color:var(--bad)">red</span> when broken.<br>
-  <kbd>R</kbd> / right-click / scroll rotates, <kbd>F</kbd> flips (works while dragging). Every puzzle has exactly one solution.
+  <b>Divide the whole window into panes</b> that obey every rule above.
+  <b>Drag</b> across empty squares to draw a pane. Drag from a pane to extend it. <b>Tap</b> a pane (or right-click) to remove it.
+  Rotated or mirrored shapes count as the same shape. A broken pane is striped red.
 </div>
 
-<div id="drag"></div>
 <div id="overlay"><div class="card">
-  <h2 id="ovTitle">Window complete!</h2>
+  <h2>Window complete!</h2>
   <p id="ovText"></p>
   <button id="cont">Continue (Space)</button>
 </div></div>
@@ -78,12 +72,14 @@
     t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   const ri = (a, b) => a + Math.floor(rand() * (b - a + 1));
+  const pick = a => a[ri(0, a.length - 1)];
   const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = ri(0, i); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 
   const DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
   const key = (x, y) => x + "," + y;
+  const unkey = k => k.split(",").map(Number);
 
-  // ---------- Shapes ----------
+  // ---------- Polyominoes ----------
   function normalize(cells) {
     const mx = Math.min(...cells.map(c => c[0])), my = Math.min(...cells.map(c => c[1]));
     return cells.map(([x, y]) => [x - mx, y - my]).sort((a, b) => a[1] - b[1] || a[0] - b[0]);
@@ -97,398 +93,342 @@
     return [...out.values()];
   }
   const canon = c => orientations(c).map(sig).sort()[0];
+  const isRect = c => { const n = normalize(c); const w = Math.max(...n.map(p => p[0])) + 1, h = Math.max(...n.map(p => p[1])) + 1; return w * h === c.length; };
+
+  // all free polyominoes up to size 6
+  const POLY = new Map(); // canon -> cells
+  (function enumerate() {
+    let layer = new Map([[canon([[0,0]]), [[0,0]]]]);
+    for (const [k, v] of layer) POLY.set(k, v);
+    for (let n = 2; n <= 6; n++) {
+      const next = new Map();
+      for (const cells of layer.values()) {
+        const set = new Set(cells.map(c => key(...c)));
+        for (const [x, y] of cells) for (const [dx, dy] of DIRS) {
+          if (set.has(key(x + dx, y + dy))) continue;
+          const nc = normalize([...cells, [x + dx, y + dy]]), k = canon(nc);
+          if (!next.has(k)) next.set(k, nc);
+        }
+      }
+      for (const [k, v] of next) POLY.set(k, v);
+      layer = next;
+    }
+  })();
+  const S = str => canon(str.split(" ").map(p => p.split(",").map(Number))); // shape from "x,y x,y ..."
+  const SHAPES = {
+    I2: S("0,0 1,0"), I3: S("0,0 1,0 2,0"), L3: S("0,0 0,1 1,1"),
+    I4: S("0,0 1,0 2,0 3,0"), O4: S("0,0 1,0 0,1 1,1"), T4: S("0,0 1,0 2,0 1,1"),
+    S4: S("1,0 2,0 0,1 1,1"), L4: S("0,0 0,1 0,2 1,2"),
+    P5: S("0,0 1,0 0,1 1,1 0,2"), I5: S("0,0 1,0 2,0 3,0 4,0"), plus: S("1,0 0,1 1,1 2,1 1,2"),
+  };
+
+  // ---------- Rules ----------
+  // Per-pane rules: shapes, size, sizes, rect. Board-wide: distinct, count, nbsize.
+  function ruleText(r) {
+    switch (r.type) {
+      case "shapes": return r.shapes.length === 1 ? "Every pane is this shape" : "Every pane is one of these";
+      case "size": return `Every pane has exactly ${r.n} squares`;
+      case "sizes": return `Every pane has ${r.set.slice(0, -1).join(", ")} or ${r.set.at(-1)} squares`;
+      case "rect": return "Every pane is a rectangle (2+ squares)";
+      case "distinct": return "No two panes share a shape";
+      case "count": return `Use exactly ${r.k} panes`;
+      case "nbsize": return "Touching panes differ in size";
+    }
+  }
+  function paneOk(r, cells) {
+    switch (r.type) {
+      case "shapes": return r.shapes.includes(canon(cells));
+      case "size": return cells.length === r.n;
+      case "sizes": return r.set.includes(cells.length);
+      case "rect": return cells.length >= 2 && isRect(cells);
+      default: return true;
+    }
+  }
+  const PER_PANE = new Set(["shapes", "size", "sizes", "rect"]);
+
+  // Shapes the generator may use, given the per-pane rules.
+  function pool(rules) {
+    let list = [...POLY.entries()].filter(([, c]) => c.length >= 2 && c.length <= 6);
+    const pr = rules.filter(r => PER_PANE.has(r.type));
+    if (!pr.some(r => r.type !== "rect")) list = list.filter(([, c]) => c.length <= 5);
+    return list.filter(([, c]) => pr.every(r => paneOk(r, c)));
+  }
 
   // ---------- Levels ----------
   const LEVELS = [
-    { w: 4, h: 3, edits: 0, min: 2, max: 4 },
-    { w: 4, h: 4, edits: 1, min: 2, max: 4 },
-    { w: 5, h: 4, edits: 2, min: 2, max: 4 },
-    { w: 5, h: 5, edits: 2, min: 2, max: 5 },
-    { w: 6, h: 5, edits: 3, min: 2, max: 5 },
-    { w: 6, h: 6, edits: 3, min: 3, max: 5 },
-    { w: 7, h: 6, edits: 4, min: 3, max: 5 },
-    { w: 7, h: 7, edits: 4, min: 3, max: 6 },
-    { w: 8, h: 7, edits: 5, min: 3, max: 6 },
-    { w: 8, h: 8, edits: 5, min: 3, max: 6 },
+    { rules: [{ type: "shapes", shapes: [SHAPES.I3] }], target: 12 },
+    { rules: [{ type: "shapes", shapes: [SHAPES.L3] }], target: 15 },
+    { rules: [{ type: "shapes", shapes: [SHAPES.I3, SHAPES.L3] }], target: 18 },
+    { rules: [{ type: "size", n: 4 }], target: 20 },
+    { rules: [{ type: "rect" }, { type: "count", k: 0 }], target: 22 },
+    { rules: [{ type: "size", n: 4 }, { type: "distinct" }], target: 20 },
+    { rules: [{ type: "sizes", set: [2, 3, 4] }, { type: "nbsize" }], target: 22 },
+    { rules: [{ type: "shapes", shapes: [SHAPES.T4, SHAPES.L4, SHAPES.S4] }], target: 28 },
+    { rules: [{ type: "size", n: 5 }], target: 30 },
+    { rules: [{ type: "sizes", set: [3, 4, 5] }, { type: "distinct" }, { type: "count", k: 0 }], target: 30 },
   ];
-  const cfg = l => LEVELS[Math.min(l, LEVELS.length) - 1];
-
-  function makeBoard({ w: W, h: H, edits }) {
-    const cells = new Set();
-    for (let y = 1; y <= H; y++) for (let x = 1; x <= W; x++) cells.add(key(x, y));
-    for (let i = 0; i < edits; i++) {
-      const side = ri(0, 3), len = ri(1, 2), add = rand() < 0.5;
-      const along = side < 2 ? W : H, start = ri(1, Math.max(1, along - len + 1));
-      for (let a = start; a < start + len; a++) {
-        let x, y;
-        if (side === 0) { x = a; y = add ? 0 : 1; } else if (side === 1) { x = a; y = add ? H + 1 : H; }
-        else if (side === 2) { y = a; x = add ? 0 : 1; } else { y = a; x = add ? W + 1 : W; }
-        if (add) cells.add(key(x, y)); else cells.delete(key(x, y));
-      }
-    }
-    const list = [...cells].map(k => k.split(",").map(Number));
-    const seen = new Set(); let best = [];
-    for (const [sx, sy] of list) {
-      if (seen.has(key(sx, sy))) continue;
-      const comp = [], st = [[sx, sy]]; seen.add(key(sx, sy));
-      while (st.length) { const [x, y] = st.pop(); comp.push([x, y]);
-        for (const [dx, dy] of DIRS) { const k = key(x + dx, y + dy);
-          if (cells.has(k) && !seen.has(k)) { seen.add(k); st.push([x + dx, y + dy]); } } }
-      if (comp.length > best.length) best = comp;
-    }
-    return normalize(best);
+  function randomLevel(l) {
+    const t = Math.min(26 + (l - 10) * 2, 44);
+    const templates = [
+      () => [{ type: "shapes", shapes: shuffle(Object.values(SHAPES).filter(s => POLY.get(s).length >= 3)).slice(0, ri(1, 3)) }],
+      () => [{ type: "size", n: ri(3, 5) }],
+      () => [{ type: "size", n: ri(4, 5) }, { type: "distinct" }],
+      () => [{ type: "sizes", set: pick([[2, 3, 4], [3, 4, 5], [2, 4], [3, 5]]) }, { type: "nbsize" }],
+      () => [{ type: "rect" }, { type: "count", k: 0 }, { type: "nbsize" }],
+      () => [{ type: "sizes", set: [3, 4, 5] }, { type: "distinct" }, { type: "nbsize" }],
+    ];
+    return { rules: pick(templates)(), target: t };
   }
+  const levelDef = l => (l <= LEVELS.length ? LEVELS[l - 1] : randomLevel(l));
 
-  function partition(cells, { min, max }) {
-    const owner = new Map(), all = new Set(cells.map(c => key(...c)));
-    const free = k => all.has(k) && !owner.has(k);
-    const fn = (x, y) => DIRS.filter(([dx, dy]) => free(key(x + dx, y + dy))).length;
-    const pieces = [];
-    while (true) {
-      const rem = cells.filter(c => free(key(...c)));
-      if (!rem.length) break;
-      rem.sort((a, b) => fn(...a) - fn(...b) || rand() - 0.5);
-      const id = pieces.length, piece = [rem[0]], target = ri(min, max);
-      owner.set(key(...rem[0]), id);
-      while (piece.length < target) {
-        const fr = [];
-        for (const [x, y] of piece) for (const [dx, dy] of DIRS) if (free(key(x + dx, y + dy))) fr.push([x + dx, y + dy]);
-        if (!fr.length) break;
-        fr.sort((a, b) => fn(...a) - fn(...b) || rand() - 0.5);
-        const pick = rand() < 0.6 ? fr[0] : fr[ri(0, fr.length - 1)];
-        owner.set(key(...pick), id); piece.push(pick);
+  // ---------- Board generation ----------
+  // Grow a board by laying down panes that already satisfy the rules, so a solution always exists.
+  function generate(def) {
+    const rules = def.rules.map(r => ({ ...r }));
+    const shapes = pool(rules);
+    const distinct = rules.some(r => r.type === "distinct"), nb = rules.some(r => r.type === "nbsize");
+    let best = null;
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const owner = new Map(), panes = [], used = new Set();
+      let filled = 0;
+      const tryPlace = (cellsAbs, k) => {
+        if (cellsAbs.some(c => owner.has(key(...c)))) return false;
+        if (nb) for (const [x, y] of cellsAbs) for (const [dx, dy] of DIRS) {
+          const o = owner.get(key(x + dx, y + dy)); if (o !== undefined && panes[o].length === cellsAbs.length) return false; }
+        const id = panes.length; panes.push(cellsAbs); cellsAbs.forEach(c => owner.set(key(...c), id));
+        used.add(k); filled += cellsAbs.length; return true;
+      };
+      const avail = () => shapes.filter(([k]) => !distinct || !used.has(k));
+      { const [k, c] = pick(avail()); tryPlace(pick(orientations(c)), k); }
+      let fails = 0;
+      while (filled < def.target && fails < 400) {
+        const a = avail(); if (!a.length) break;
+        // pick an empty cell next to the board, favouring snug spots for a compact window
+        const front = new Map();
+        for (const k of owner.keys()) { const [x, y] = unkey(k);
+          for (const [dx, dy] of DIRS) { const nk = key(x + dx, y + dy); if (!owner.has(nk)) front.set(nk, (front.get(nk) || 0) + 1); } }
+        const fr = [...front.entries()]; fr.sort((p, q) => q[1] - p[1] || rand() - .5);
+        const [ek] = rand() < .7 ? fr[ri(0, Math.min(3, fr.length - 1))] : pick(fr);
+        const [ex, ey] = unkey(ek);
+        const [k, c] = pick(a), o = pick(orientations(c)), [ax, ay] = pick(o);
+        const abs = o.map(([x, y]) => [x - ax + ex, y - ay + ey]);
+        if (filled + abs.length > def.target + 2 || !tryPlace(abs, k)) fails++;
       }
-      pieces.push(piece);
+      const score = Math.abs(filled - def.target);
+      if (!best || score < best.score) best = { panes, score };
+      if (score <= 2) break;
     }
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (let i = 0; i < pieces.length; i++) {
-        const p = pieces[i]; if (!p || p.length >= min) continue;
-        const nb = new Set();
-        for (const [x, y] of p) for (const [dx, dy] of DIRS) {
-          const o = owner.get(key(x + dx, y + dy)); if (o !== undefined && o !== i && pieces[o]) nb.add(o); }
-        if (!nb.size) continue;
-        const t = [...nb].sort((a, b) => pieces[a].length - pieces[b].length)[0];
-        for (const c of p) { owner.set(key(...c), t); pieces[t].push(c); }
-        pieces[i] = null; changed = true;
-      }
-    }
-    return pieces.filter(Boolean);
-  }
-
-  // A pin sits on a grid corner (vx,vy) = top-left corner of cell (vx,vy).
-  const pinCells = (vx, vy, set) => [[vx - 1, vy - 1], [vx, vy - 1], [vx - 1, vy], [vx, vy]].filter(c => set.has(key(...c)));
-
-  // ---------- Solver (counts solutions up to `limit`) ----------
-  // Pieces with the same shape are interchangeable, so solutions are counted by visible tiling.
-  function countSolutions(cells, pieces, pins, limit = 2, nodeLimit = 150000) {
-    const W = Math.max(...cells.map(c => c[0])) + 2, H = Math.max(...cells.map(c => c[1])) + 2;
-    const idx = (x, y) => y * W + x;
-    const on = new Uint8Array(W * H); for (const [x, y] of cells) on[idx(x, y)] = 1;
-    const order = cells.map(([x, y]) => idx(x, y)).sort((a, b) => a - b);
-    const occ = new Int16Array(W * H).fill(-1);
-    const types = new Map();
-    for (const p of pieces) { const c = canon(p); if (!types.has(c)) types.set(c, { orients: orientations(p), n: 0, size: p.length }); types.get(c).n++; }
-    const T = [...types.values()];
-    const size = []; // size per placed instance id
-    const cellPins = new Map();
-    const P = pins.map(p => ({ t: p.target, cs: pinCells(p.vx, p.vy, new Set(cells.map(c => key(...c)))).map(([x, y]) => idx(x, y)) }));
-    P.forEach((p, i) => p.cs.forEach(c => { if (!cellPins.has(c)) cellPins.set(c, []); cellPins.get(c).push(i); }));
-    const pinOk = i => {
-      const p = P[i]; const seen = new Set(); let s = 0, filled = 0;
-      for (const c of p.cs) { const o = occ[c]; if (o >= 0) { filled++; if (!seen.has(o)) { seen.add(o); s += size[o]; } } }
-      return filled === p.cs.length ? s === p.t : s < p.t; // empty cells can only be filled by new panes
-    };
-    let found = 0, nodes = 0, aborted = false, pos = 0, inst = 0;
-    function dfs() {
-      if (found >= limit || aborted) return;
-      if (++nodes > nodeLimit) { aborted = true; return; }
-      while (pos < order.length && occ[order[pos]] >= 0) pos++;
-      if (pos === order.length) { found++; return; }
-      const savePos = pos, cell = order[pos], cx = cell % W, cy = (cell / W) | 0;
-      for (const t of T) {
-        if (!t.n) continue;
-        for (const o of t.orients) {
-          const dx = cx - o[0][0], dy = cy - o[0][1];
-          let ok = true; const placedCells = [];
-          for (const [x, y] of o) { const X = x + dx, Y = y + dy;
-            if (X < 0 || Y < 0 || X >= W || Y >= H) { ok = false; break; }
-            const c = idx(X, Y); if (!on[c] || occ[c] >= 0) { ok = false; break; } placedCells.push(c); }
-          if (!ok) continue;
-          const id = inst++; size[id] = t.size; t.n--;
-          for (const c of placedCells) occ[c] = id;
-          let good = true; const checked = new Set();
-          for (const c of placedCells) for (const pi of cellPins.get(c) || []) if (!checked.has(pi)) { checked.add(pi); if (!pinOk(pi)) { good = false; break; } }
-          if (good) dfs();
-          for (const c of placedCells) occ[c] = -1;
-          t.n++; inst--; pos = savePos;
-          if (found >= limit || aborted) return;
-        }
-      }
-    }
-    dfs();
-    return { found, aborted };
-  }
-
-  // ---------- Puzzle generation ----------
-  function generate(level) {
-    const c = cfg(level);
-    for (let attempt = 0; attempt < 30; attempt++) {
-      const cells = makeBoard(c);
-      const parts = partition(cells, c);
-      const set = new Set(cells.map(k => key(...k)));
-      const owner = new Map(); parts.forEach((p, i) => p.forEach(q => owner.set(key(...q), i)));
-      const pinValue = (vx, vy) => { const ids = new Set(pinCells(vx, vy, set).map(q => owner.get(key(...q))));
-        let s = 0; ids.forEach(i => s += parts[i].length); return s; };
-      // candidate corners: touched by at least 2 window cells
-      const xs = cells.map(q => q[0]), ys = cells.map(q => q[1]);
-      let pins = [];
-      for (let vy = Math.min(...ys); vy <= Math.max(...ys) + 1; vy++)
-        for (let vx = Math.min(...xs); vx <= Math.max(...xs) + 1; vx++)
-          if (pinCells(vx, vy, set).length >= 2) pins.push({ vx, vy, target: pinValue(vx, vy) });
-      if (countSolutions(cells, parts, pins).found !== 1) continue; // should not happen, but be safe
-      // remove pins one by one while the solution stays unique
-      const t0 = performance.now();
-      for (const p of shuffle(pins.slice())) {
-        if (performance.now() - t0 > 2500) break;
-        const trial = pins.filter(q => q !== p);
-        const r = countSolutions(cells, parts, trial);
-        if (!r.aborted && r.found === 1) pins = trial;
-      }
-      return { cells, parts, pins };
-    }
-    throw new Error("generation failed");
+    const cells = normalize(best.panes.flat());
+    for (const r of rules) if (r.type === "count") r.k = best.panes.length;
+    return { cells, rules, solution: best.panes };
   }
 
   // ---------- Glass drawing ----------
   const PALETTE = ["#5ec8f2","#f26d6d","#f2c14e","#7ee08a","#b48cf2","#f29bd0","#5ef2c8","#f2985e","#8fa8ff","#d6f25e","#c9a27a","#7af2f2"];
+  const shapeColor = new Map();
+  function colorFor(cells) {
+    if (rules.some(r => r.type === "nbsize")) return PALETTE[(cells.length * 3) % PALETTE.length];
+    const k = canon(cells);
+    if (!shapeColor.has(k)) shapeColor.set(k, PALETTE[shapeColor.size % PALETTE.length]);
+    return shapeColor.get(k);
+  }
   function shade(hex, amt) { const n = parseInt(hex.slice(1), 16), f = v => Math.max(0, Math.min(255, v + amt));
     return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`; }
-  function glassCell(c, x, y, s, color, alpha = 1) {
-    c.save(); c.globalAlpha = alpha;
+  function glassCell(c, x, y, s, color) {
     const g = c.createLinearGradient(x, y, x + s, y + s);
     g.addColorStop(0, shade(color, 40)); g.addColorStop(.55, color); g.addColorStop(1, shade(color, -35));
     c.fillStyle = g; c.fillRect(x, y, s, s);
     c.fillStyle = "rgba(255,255,255,.28)";
     c.beginPath(); c.moveTo(x + s * .12, y + s * .12); c.lineTo(x + s * .55, y + s * .12); c.lineTo(x + s * .12, y + s * .55); c.fill();
+  }
+  function hatch(c, x, y, s) {
+    c.save(); c.beginPath(); c.rect(x, y, s, s); c.clip();
+    c.strokeStyle = "rgba(255,60,60,.8)"; c.lineWidth = Math.max(2, s * .08);
+    for (let i = -s; i < s; i += s / 3) { c.beginPath(); c.moveTo(x + i, y + s); c.lineTo(x + i + s, y); c.stroke(); }
     c.restore();
   }
   function outline(c, set, ox, oy, s, width, color) {
     c.strokeStyle = color; c.lineWidth = width; c.lineCap = "round"; c.beginPath();
-    for (const k of set) { const [x, y] = k.split(",").map(Number), px = ox + x * s, py = oy + y * s;
+    for (const k of set) { const [x, y] = unkey(k), px = ox + x * s, py = oy + y * s;
       if (!set.has(key(x, y - 1))) { c.moveTo(px, py); c.lineTo(px + s, py); }
       if (!set.has(key(x, y + 1))) { c.moveTo(px, py + s); c.lineTo(px + s, py + s); }
       if (!set.has(key(x - 1, y))) { c.moveTo(px, py); c.lineTo(px, py + s); }
       if (!set.has(key(x + 1, y))) { c.moveTo(px + s, py); c.lineTo(px + s, py + s); } }
     c.stroke();
   }
-  function pieceCanvas(piece, s) {
-    const w = Math.max(...piece.cells.map(c => c[0])) + 1, h = Math.max(...piece.cells.map(c => c[1])) + 1;
+  function shapeIcon(cells, s = 11) {
+    const n = normalize(cells), w = Math.max(...n.map(c => c[0])) + 1, h = Math.max(...n.map(c => c[1])) + 1;
     const cv = document.createElement("canvas"), dpr = window.devicePixelRatio || 1;
-    cv.width = w * s * dpr + 4 * dpr; cv.height = h * s * dpr + 4 * dpr;
-    cv.style.width = (w * s + 4) + "px"; cv.style.height = (h * s + 4) + "px";
+    cv.width = (w * s + 4) * dpr; cv.height = (h * s + 4) * dpr; cv.style.width = (w * s + 4) + "px"; cv.style.height = (h * s + 4) + "px";
     const c = cv.getContext("2d"); c.setTransform(dpr, 0, 0, dpr, 0, 0);
-    for (const [x, y] of piece.cells) glassCell(c, 2 + x * s, 2 + y * s, s, piece.color);
-    outline(c, new Set(piece.cells.map(k => key(...k))), 2, 2, s, Math.max(2, s * .09), "#11131a");
+    for (const [x, y] of n) glassCell(c, 2 + x * s, 2 + y * s, s, "#cfd6ea");
+    outline(c, new Set(n.map(p => key(...p))), 2, 2, s, 1.5, "#11131a");
     return cv;
   }
 
-  // ---------- Game state ----------
-  let level = 1, cells, cellSet, W, H, pins, pieces, grid, selected = null, drag = null, hoverCell = null;
+  // ---------- State ----------
+  let level = 1, cells, cellSet, W, H, rules, panes, owner, history, draw = null;
 
   function newLevel(l) {
     level = l;
-    const g = generate(level);
-    cells = g.cells; cellSet = new Set(cells.map(c => key(...c))); pins = g.pins;
+    const g = generate(levelDef(level));
+    cells = g.cells; rules = g.rules; window.__solution = g.solution;
+    cellSet = new Set(cells.map(c => key(...c)));
     W = Math.max(...cells.map(c => c[0])) + 1; H = Math.max(...cells.map(c => c[1])) + 1;
-    pieces = shuffle(g.parts.map((p, i) => {
-      let s = normalize(p); for (let k = ri(0, 3); k > 0; k--) s = rotate(s); if (rand() < 0.5) s = flip(s);
-      return { id: i, cells: s, color: PALETTE[i % PALETTE.length], fp: null, sol: p };
-    }));
-    pieces.sort((a, b) => a.cells.length - b.cells.length);
-    grid = new Map(); selected = null; hideOverlay(); setMsg("");
-    resize(); render();
+    panes = []; history = []; shapeColor.clear(); rebuildOwner();
+    buildRules(); hideOverlay(); setMsg(""); resize(); update();
   }
+  function rebuildOwner() { owner = new Map(); panes.forEach((p, i) => p.forEach(c => owner.set(c, i))); }
+  function snapshot() { history.push(panes.map(p => p.slice())); if (history.length > 200) history.shift(); }
 
-  const anchorOf = cells => { const cx = cells.reduce((s, c) => s + c[0], 0) / cells.length, cy = cells.reduce((s, c) => s + c[1], 0) / cells.length;
-    return cells.reduce((b, c) => Math.hypot(c[0] - cx, c[1] - cy) < Math.hypot(b[0] - cx, b[1] - cy) ? c : b); };
-  const footprint = (piece, gx, gy) => { const [ax, ay] = anchorOf(piece.cells); return piece.cells.map(([x, y]) => [x - ax + gx, y - ay + gy]); };
-  const fits = fp => fp.every(([x, y]) => cellSet.has(key(x, y)) && !grid.has(key(x, y)));
-
-  function putOn(piece, fp) { piece.fp = fp; for (const c of fp) grid.set(key(...c), piece); }
-  function takeOff(piece) { if (!piece.fp) return; for (const c of piece.fp) grid.delete(key(...c)); piece.fp = null; }
-
-  function pinStatus(p) {
-    const cs = pinCells(p.vx, p.vy, cellSet); const seen = new Set(); let s = 0, filled = 0;
-    for (const c of cs) { const pc = grid.get(key(...c)); if (pc) { filled++; if (!seen.has(pc)) { seen.add(pc); s += pc.cells.length; } } }
-    if (filled === cs.length) return s === p.target ? "ok" : "bad";
-    return s >= p.target ? "bad" : "open"; // more cells still to touch means the total can only grow
-  }
-
-  function afterChange(placedPiece) {
-    const broken = pins.filter(p => pinStatus(p) === "bad");
-    if (placedPiece && broken.length) setMsg(`That breaks ${broken.length === 1 ? "a pin" : broken.length + " pins"}.`, "bad");
-    else setMsg("");
-    render();
-    if (pieces.every(p => p.fp)) {
-      if (!broken.length) setTimeout(win, 250);
-      else setMsg("The window is full but some pins are broken.", "bad");
+  // ---------- Evaluation ----------
+  function evaluate() {
+    const paneCells = panes.map(p => p.map(unkey));
+    const badPane = new Set(), status = [];
+    const full = owner.size === cells.length;
+    for (const r of rules) {
+      let bad = false, extra = "";
+      if (PER_PANE.has(r.type)) paneCells.forEach((c, i) => { if (!paneOk(r, c)) { badPane.add(i); bad = true; } });
+      else if (r.type === "distinct") {
+        const seen = new Map();
+        paneCells.forEach((c, i) => { const k = canon(c); if (seen.has(k)) { badPane.add(i); badPane.add(seen.get(k)); bad = true; } else seen.set(k, i); });
+      } else if (r.type === "nbsize") {
+        panes.forEach((p, i) => { for (const k of p) { const [x, y] = unkey(k);
+          for (const [dx, dy] of DIRS) { const o = owner.get(key(x + dx, y + dy));
+            if (o !== undefined && o !== i && panes[o].length === p.length) { badPane.add(i); bad = true; } } } });
+      } else if (r.type === "count") {
+        extra = ` (${panes.length}/${r.k})`;
+        bad = panes.length > r.k || (full && panes.length !== r.k);
+      }
+      status.push({ state: bad ? "bad" : full ? "ok" : "open", extra });
     }
+    return { badPane, status, full, win: full && status.every(s => s.state === "ok") };
   }
 
   // ---------- Rendering ----------
   const board = document.getElementById("board"), ctx = board.getContext("2d");
-  let CS = 48; const PAD = 18;
+  let CS = 48; const PAD = 14;
   function resize() {
-    const maxW = Math.min(window.innerWidth - 32, 560), maxH = Math.max(240, window.innerHeight * 0.5);
-    CS = Math.max(26, Math.min(72, Math.floor(Math.min((maxW - PAD * 2) / W, (maxH - PAD * 2) / H))));
+    const maxW = Math.min(window.innerWidth - 32, 560), maxH = Math.max(260, window.innerHeight * .58);
+    CS = Math.max(24, Math.min(64, Math.floor(Math.min((maxW - PAD * 2) / W, (maxH - PAD * 2) / H))));
     const dpr = window.devicePixelRatio || 1, pw = W * CS + PAD * 2, ph = H * CS + PAD * 2;
     board.width = pw * dpr; board.height = ph * dpr; board.style.width = pw + "px"; board.style.height = ph + "px";
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
-  function render() {
+  const ruleEls = [];
+  function buildRules() {
+    const box = document.getElementById("rules"); box.innerHTML = ""; ruleEls.length = 0;
+    for (const r of rules) {
+      const el = document.createElement("div"); el.className = "rule";
+      const mark = document.createElement("span"); mark.className = "mark"; mark.textContent = "•";
+      const txt = document.createElement("span"); txt.textContent = ruleText(r);
+      el.append(mark, txt);
+      if (r.type === "shapes") { const sh = document.createElement("span"); sh.className = "shapes";
+        r.shapes.forEach(s => sh.appendChild(shapeIcon(POLY.get(s)))); el.appendChild(sh); }
+      box.appendChild(el); ruleEls.push({ el, mark, txt, r });
+    }
+  }
+  function update() {
+    const ev = evaluate();
     ctx.clearRect(0, 0, W * CS + PAD * 2, H * CS + PAD * 2);
     for (const [x, y] of cells) {
       ctx.fillStyle = "#2a3042"; ctx.fillRect(PAD + x * CS, PAD + y * CS, CS, CS);
       ctx.strokeStyle = "#3a4157"; ctx.lineWidth = 1; ctx.strokeRect(PAD + x * CS + .5, PAD + y * CS + .5, CS - 1, CS - 1);
     }
-    for (const p of pieces) if (p.fp) {
-      for (const [x, y] of p.fp) glassCell(ctx, PAD + x * CS, PAD + y * CS, CS, p.color);
-      outline(ctx, new Set(p.fp.map(c => key(...c))), PAD, PAD, CS, Math.max(2, CS * .09), "#11131a");
-    }
-    if (drag && hoverCell) {
-      const fp = footprint(drag.piece, ...hoverCell), ok = fits(fp);
-      for (const [x, y] of fp) {
-        if (ok) glassCell(ctx, PAD + x * CS, PAD + y * CS, CS, drag.piece.color, .55);
-        else { ctx.fillStyle = "rgba(255,90,90,.35)"; ctx.fillRect(PAD + x * CS, PAD + y * CS, CS, CS); }
-      }
-      outline(ctx, new Set(fp.map(c => key(...c))), PAD, PAD, CS, 2, ok ? "#e9ecf5" : "#ff6b6b");
+    panes.forEach((p, i) => {
+      if (draw && draw.index === i) return;
+      const color = colorFor(p.map(unkey));
+      for (const k of p) { const [x, y] = unkey(k); glassCell(ctx, PAD + x * CS, PAD + y * CS, CS, color);
+        if (ev.badPane.has(i)) hatch(ctx, PAD + x * CS, PAD + y * CS, CS); }
+      outline(ctx, new Set(p), PAD, PAD, CS, Math.max(2, CS * .09), "#11131a");
+    });
+    if (draw) {
+      for (const k of draw.cells) { const [x, y] = unkey(k); glassCell(ctx, PAD + x * CS, PAD + y * CS, CS, "#cfd6ea"); }
+      outline(ctx, new Set(draw.cells), PAD, PAD, CS, 3, "#ffffff");
+      const n = draw.cells.length, [lx, ly] = unkey(draw.cells.at(-1));
+      ctx.fillStyle = "#11131a"; ctx.font = `700 ${Math.round(CS * .42)}px system-ui,sans-serif`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(n, PAD + (lx + .5) * CS, PAD + (ly + .5) * CS);
     }
     outline(ctx, cellSet, PAD, PAD, CS, Math.max(4, CS * .14), "#9aa3bd");
-    // pins
-    const r = Math.max(10, CS * .26);
-    for (const p of pins) {
-      const st = pinStatus(p), x = PAD + p.vx * CS, y = PAD + p.vy * CS;
-      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fillStyle = st === "ok" ? "#1d4a32" : st === "bad" ? "#5a1f24" : "#f4f1e8"; ctx.fill();
-      ctx.lineWidth = 2; ctx.strokeStyle = st === "ok" ? "#6fe39a" : st === "bad" ? "#ff6b6b" : "#11131a"; ctx.stroke();
-      ctx.fillStyle = st === "open" ? "#11131a" : st === "ok" ? "#6fe39a" : "#ff8b8b";
-      ctx.font = `700 ${Math.round(r * 1.1)}px system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText(p.target, x, y + 1);
-    }
-    renderBank();
+    ruleEls.forEach((re, i) => { const s = ev.status[i];
+      re.el.className = "rule " + (s.state === "open" ? "" : s.state);
+      re.mark.textContent = s.state === "ok" ? "✓" : s.state === "bad" ? "✗" : "•";
+      re.txt.textContent = ruleText(re.r) + s.extra; });
     document.getElementById("lvl").textContent = level;
-    document.getElementById("left").textContent = pieces.filter(p => !p.fp).length;
+    document.getElementById("filled").textContent = owner.size;
+    document.getElementById("total").textContent = cells.length;
+    document.getElementById("undo").disabled = !history.length;
+    if (ev.full && !ev.win && !draw) setMsg("The window is full, but some rules are broken.", "bad");
+    else if (!draw) setMsg("");
+    return ev;
   }
-
-  const bank = document.getElementById("bank");
-  function renderBank() {
-    bank.innerHTML = "";
-    const s = Math.max(14, Math.min(24, Math.floor(CS * .45)));
-    for (const p of pieces) {
-      if (p.fp || (drag && drag.piece === p)) continue;
-      const el = document.createElement("div"); el.className = "bp" + (selected === p ? " sel" : "");
-      el.appendChild(pieceCanvas(p, s));
-      el.addEventListener("pointerdown", ev => startDrag(ev, p));
-      el.addEventListener("contextmenu", ev => { ev.preventDefault(); selected = p; doRotate(); });
-      bank.appendChild(el);
-    }
-  }
-
   const msg = document.getElementById("msg");
-  function setMsg(t, cls = "") { msg.textContent = t; msg.className = cls; }
+  function setMsg(t, cls = "") { msg.textContent = t; msg.style.color = cls === "bad" ? "var(--bad)" : ""; }
 
-  // ---------- Drag & drop ----------
-  const dragEl = document.getElementById("drag");
-  function cellFromPoint(x, y) {
+  // ---------- Drawing input ----------
+  function cellAt(ev) {
     const r = board.getBoundingClientRect();
-    return [Math.floor((x - r.left - PAD) / CS), Math.floor((y - r.top - PAD) / CS)];
+    const x = Math.floor((ev.clientX - r.left - PAD) / CS), y = Math.floor((ev.clientY - r.top - PAD) / CS);
+    return cellSet.has(key(x, y)) ? key(x, y) : null;
   }
-  function onBoard(x, y) { const r = board.getBoundingClientRect(); return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom; }
-  function drawDragEl() {
-    if (!drag) return;
-    dragEl.innerHTML = ""; dragEl.appendChild(pieceCanvas(drag.piece, CS));
-    const [ax, ay] = anchorOf(drag.piece.cells);
-    drag.offX = 2 + ax * CS + CS / 2; drag.offY = 2 + ay * CS + CS / 2;
-    positionDragEl();
-  }
-  function positionDragEl() {
-    dragEl.style.transform = `translate(${drag.x - drag.offX}px, ${drag.y - drag.offY}px)`;
-    dragEl.style.display = drag.moved ? "block" : "none";
-  }
-  function startDrag(ev, piece, fromBoard = null) {
-    if (ev.button !== 0 || overlayAction) return;
-    ev.preventDefault();
-    selected = piece;
-    drag = { piece, x: ev.clientX, y: ev.clientY, sx: ev.clientX, sy: ev.clientY, moved: false, from: fromBoard };
-    drawDragEl(); render();
-  }
-  window.addEventListener("pointermove", ev => {
-    if (!drag) return;
-    drag.x = ev.clientX; drag.y = ev.clientY;
-    if (!drag.moved && Math.hypot(drag.x - drag.sx, drag.y - drag.sy) > 6) drag.moved = true;
-    hoverCell = drag.moved && onBoard(drag.x, drag.y) ? cellFromPoint(drag.x, drag.y) : null;
-    positionDragEl(); render();
-  });
-  window.addEventListener("pointerup", ev => {
-    if (!drag) return;
-    const d = drag; drag = null; hoverCell = null; dragEl.style.display = "none";
-    let placed = false;
-    if (d.moved && onBoard(ev.clientX, ev.clientY)) {
-      const fp = footprint(d.piece, ...cellFromPoint(ev.clientX, ev.clientY));
-      if (fits(fp)) { putOn(d.piece, fp); placed = true; }
-    }
-    if (!placed && d.from) {
-      // a tap on a placed pane leaves it where it was; a drag elsewhere sends it back to the bank
-      if (!d.moved) putOn(d.piece, d.from);
-      else if (onBoard(ev.clientX, ev.clientY)) setMsg("It doesn't fit there, so it went back to the bank.", "bad");
-    } else if (!placed && d.moved && onBoard(ev.clientX, ev.clientY)) setMsg("It doesn't fit there.", "bad");
-    if (placed) selected = null;
-    afterChange(placed ? d.piece : null);
-  });
-  window.addEventListener("pointercancel", () => { if (!drag) return; if (drag.from) putOn(drag.piece, drag.from); drag = null; hoverCell = null; dragEl.style.display = "none"; render(); });
-  board.addEventListener("pointerdown", ev => {
-    const p = grid.get(key(...cellFromPoint(ev.clientX, ev.clientY)));
-    if (!p) return;
-    const from = p.fp; takeOff(p);
-    startDrag(ev, p, from);
-  });
-  document.addEventListener("contextmenu", ev => { if (drag || ev.target === board) { ev.preventDefault(); if (drag) doRotate(); } });
-  window.addEventListener("wheel", ev => { if (!drag) return; ev.preventDefault(); doRotate(ev.deltaY < 0 ? 3 : 1); }, { passive: false });
+  const adjacentTo = (k, list) => { const [x, y] = unkey(k); return list.some(o => { const [a, b] = unkey(o); return Math.abs(a - x) + Math.abs(b - y) === 1; }); };
 
-  function transformSel(fn) {
-    const p = drag ? drag.piece : selected;
-    if (!p || p.fp || overlayAction) return;
-    p.cells = fn(p.cells);
-    if (drag) { drawDragEl(); if (onBoard(drag.x, drag.y)) hoverCell = cellFromPoint(drag.x, drag.y); }
-    render();
+  board.addEventListener("pointerdown", ev => {
+    if (overlayAction) return;
+    const k = cellAt(ev); if (!k) return;
+    ev.preventDefault();
+    if (ev.button === 2) { const i = owner.get(k); if (i !== undefined) removePane(i); return; }
+    if (ev.button !== 0) return;
+    board.setPointerCapture(ev.pointerId);
+    const i = owner.get(k);
+    if (i !== undefined) draw = { index: i, cells: panes[i].slice(), start: k, moved: false, base: panes[i].length };
+    else draw = { index: -1, cells: [k], start: k, moved: false, base: 0 };
+    update();
+  });
+  board.addEventListener("pointermove", ev => {
+    if (!draw) return;
+    const k = cellAt(ev); if (!k || k === draw.cells.at(-1)) return;
+    const c = draw.cells;
+    // moving over squares already in the pane is free, so T and + shapes can be drawn in one drag
+    if (!c.includes(k) && !owner.has(k) && adjacentTo(k, c)) { c.push(k); draw.moved = true; }
+    update();
+  });
+  function finishDraw() {
+    if (!draw) return;
+    const d = draw; draw = null;
+    if (d.index >= 0) {
+      if (!d.moved) { removePane(d.index); return; }       // tap on a pane removes it
+      if (d.cells.length !== panes[d.index].length) { snapshot(); panes[d.index] = d.cells; }
+    } else { snapshot(); panes.push(d.cells); }
+    rebuildOwner(); afterChange();
   }
-  function doRotate(times = 1) { transformSel(c => { for (let i = 0; i < times; i++) c = rotate(c); return c; }); }
-  const doFlip = () => transformSel(flip);
-  document.getElementById("rot").onclick = () => doRotate();
-  document.getElementById("flip").onclick = doFlip;
-  document.getElementById("reset").onclick = () => { pieces.forEach(takeOff); selected = null; afterChange(null); };
+  board.addEventListener("pointerup", finishDraw);
+  board.addEventListener("pointercancel", () => { draw = null; update(); });
+  board.addEventListener("contextmenu", ev => ev.preventDefault());
+
+  function removePane(i) { snapshot(); panes.splice(i, 1); rebuildOwner(); afterChange(); }
+  function afterChange() { const ev = update(); if (ev.win) setTimeout(win, 250); }
+  function undo() { if (!history.length || draw) return; panes = history.pop(); rebuildOwner(); update(); }
+  document.getElementById("undo").onclick = undo;
+  document.getElementById("clear").onclick = () => { if (!panes.length) return; snapshot(); panes = []; rebuildOwner(); update(); };
   document.getElementById("skip").onclick = () => newLevel(level);
 
   // ---------- Overlay ----------
   const overlay = document.getElementById("overlay"); let overlayAction = null;
-  function showOverlay(t, txt, btn, act) { document.getElementById("ovTitle").textContent = t; document.getElementById("ovText").textContent = txt;
-    document.getElementById("cont").textContent = btn; overlayAction = act; overlay.classList.add("show"); }
   function hideOverlay() { overlay.classList.remove("show"); overlayAction = null; }
-  function win() { if (!pieces.every(p => p.fp) || pins.some(p => pinStatus(p) !== "ok")) return;
-    showOverlay("Window complete!", `Level ${level} glazed with ${pieces.length} panes and ${pins.length} pins satisfied.`, "Continue (Space)", () => newLevel(level + 1)); }
+  function win() { if (!evaluate().win) return;
+    document.getElementById("ovText").textContent = `Level ${level}: ${panes.length} panes, every rule satisfied.`;
+    overlayAction = () => newLevel(level + 1); overlay.classList.add("show"); }
   document.getElementById("cont").onclick = () => overlayAction && overlayAction();
-
   window.addEventListener("keydown", ev => {
     if (ev.code === "Space" || ev.code === "Enter") { if (overlayAction) { ev.preventDefault(); overlayAction(); } return; }
     if (overlayAction) return;
-    const k = ev.key.toLowerCase();
-    if (k === "r") doRotate(ev.shiftKey ? 3 : 1); else if (k === "f") doFlip();
+    if (ev.key.toLowerCase() === "z") undo();
   });
-  window.addEventListener("resize", () => { resize(); render(); });
+  window.addEventListener("resize", () => { resize(); update(); });
 
-  window.__game = { get s() { return { level, cells, pins, pieces, grid }; }, newLevel, putOn, takeOff, pinStatus, countSolutions, footprint, fits };
+  window.__game = { get s() { return { level, cells, rules, panes, CS, PAD }; }, newLevel, evaluate,
+    setPanes(p) { panes = p; rebuildOwner(); afterChange(); } };
   newLevel(1);
 })();
 </script>

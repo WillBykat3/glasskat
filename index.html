@@ -2,434 +2,932 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Glasskat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <style>
-  :root { --bg:#14161f; --panel:#1f2330; --ink:#e9ecf5; --muted:#8b93ab; --accent:#7fd3ff; --ok:#6fe39a; --bad:#ff6b6b; }
-  * { box-sizing:border-box; }
-  html, body { margin:0; min-height:100%; background:var(--bg); color:var(--ink);
-    font:15px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif; }
-  body { display:flex; flex-direction:column; align-items:center; padding:12px 16px 24px; gap:10px;
-    user-select:none; -webkit-user-select:none; }
-  header { display:flex; align-items:baseline; gap:14px; width:100%; max-width:640px; justify-content:space-between; }
-  h1 { margin:0; font-size:22px; letter-spacing:.04em; }
-  .stats { color:var(--muted); font-variant-numeric:tabular-nums; }
-  #rules { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; width:100%; max-width:640px; }
-  .rule { background:var(--panel); border:2px solid #343a4d; border-radius:10px; padding:6px 10px;
-    display:flex; align-items:center; gap:8px; font-size:14px; }
-  .rule.ok { border-color:var(--ok); } .rule.bad { border-color:var(--bad); }
-  .rule .mark { font-weight:700; width:1em; text-align:center; }
-  .rule.ok .mark { color:var(--ok); } .rule.bad .mark { color:var(--bad); }
-  .rule .shapes { display:flex; gap:6px; align-items:center; }
-  .rule canvas { display:block; }
-  #board { display:block; max-width:100%; touch-action:none; cursor:crosshair; }
-  #msg { min-height:20px; font-size:14px; color:var(--muted); text-align:center; }
-  .controls { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
-  button { background:var(--panel); color:var(--ink); border:1px solid #343a4d; border-radius:8px;
-    padding:8px 12px; font:inherit; cursor:pointer; }
-  button:hover { border-color:var(--accent); } button:disabled { opacity:.4; cursor:default; }
-  .help { color:var(--muted); font-size:13px; text-align:center; max-width:640px; }
-  .help b { color:var(--ink); }
-  kbd { background:#2a2f3e; border-radius:4px; padding:0 5px; font-size:12px; }
-  #overlay { position:fixed; inset:0; display:none; place-items:center; background:rgba(10,12,18,.72); z-index:10; }
-  #overlay.show { display:grid; }
-  #overlay .card { background:var(--panel); padding:22px 28px; border-radius:14px; text-align:center; max-width:320px; }
-  #overlay h2 { margin:0 0 6px; }
+  :root {
+    --bg: #f6f6f3; --surface: #ffffff; --ink: #1c1c1e; --ink-2: #55565c; --muted: #8e8f96;
+    --line: #e4e4df; --line-2: #d3d3cd; --wall: #1c1c1e; --accent: #3b6cf6; --accent-soft: rgba(59,108,246,.14);
+    --ok: #2f9e62; --bad: #e0483d; --bad-soft: rgba(224,72,61,.16); --shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06);
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #111113; --surface: #1a1a1d; --ink: #f2f2f4; --ink-2: #b4b5bb; --muted: #7c7d84;
+    --line: #2a2a2f; --line-2: #36363c; --wall: #f2f2f4; --accent: #7c9cff; --accent-soft: rgba(124,156,255,.18);
+    --ok: #5fd08f; --bad: #ff6b60; --bad-soft: rgba(255,107,96,.18); --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  } }
+  :root[data-theme="dark"] {
+    --bg: #111113; --surface: #1a1a1d; --ink: #f2f2f4; --ink-2: #b4b5bb; --muted: #7c7d84;
+    --line: #2a2a2f; --line-2: #36363c; --wall: #f2f2f4; --accent: #7c9cff; --accent-soft: rgba(124,156,255,.18);
+    --ok: #5fd08f; --bad: #ff6b60; --bad-soft: rgba(255,107,96,.18); --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+  body { font: 15px/1.45 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; font-feature-settings: "tnum" 1, "cv11" 1;
+    -webkit-font-smoothing: antialiased; min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+    padding: max(14px, env(safe-area-inset-top)) 16px 28px; -webkit-user-select: none; user-select: none; }
+  .wrap { width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 14px; }
+
+  /* top bar */
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 40px; }
+  .brand { font-weight: 700; font-size: 19px; letter-spacing: -.02em; }
+  .brand span { color: var(--muted); font-weight: 500; }
+  .top-right { display: flex; align-items: center; gap: 8px; position: relative; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 999px;
+    background: var(--surface); border: 1px solid var(--line); color: var(--ink); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; }
+  .chip:hover { border-color: var(--line-2); }
+  .avatar { width: 22px; height: 22px; border-radius: 50%; background: var(--ink); color: var(--surface); display: grid; place-items: center;
+    font-size: 12px; font-weight: 600; margin-left: -6px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+  .dot.saving, .dot.pending { background: #d6a43a; } .dot.error { background: var(--bad); }
+  .icon-btn { width: 34px; height: 34px; padding: 0; justify-content: center; }
+
+  /* status row */
+  .status { display: flex; align-items: baseline; justify-content: space-between; }
+  .level { font-size: 26px; font-weight: 700; letter-spacing: -.03em; }
+  .level small { font-size: 14px; color: var(--muted); font-weight: 500; letter-spacing: 0; margin-left: 6px; }
+  .timer { font-size: 15px; color: var(--ink-2); font-weight: 500; }
+  .progress { height: 3px; background: var(--line); border-radius: 3px; overflow: hidden; margin-top: -6px; }
+  .progress i { display: block; height: 100%; width: 0; background: var(--ink); border-radius: 3px; transition: width .3s ease; }
+
+  /* rules */
+  .rules { display: flex; flex-direction: column; gap: 6px; }
+  .rule { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ink-2); min-height: 28px; }
+  .rule .st { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--line-2); flex: none; display: grid; place-items: center;
+    font-size: 11px; font-weight: 700; color: transparent; transition: all .2s; }
+  .rule.ok .st { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .rule.bad .st { background: var(--bad); border-color: var(--bad); color: #fff; }
+  .rule.ok { color: var(--ink); }
+  .rule .shapes { display: inline-flex; gap: 8px; align-items: center; margin-left: 2px; }
+  .rule canvas { display: block; }
+
+  /* board */
+  .board-card { display: grid; place-items: center; padding: 6px 0; }
+  #board { display: block; touch-action: none; max-width: 100%; }
+  #board.lines { cursor: crosshair; } #board.boxes { cursor: pointer; }
+
+  /* toolbar */
+  .tools { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .seg { display: inline-flex; background: var(--line); border-radius: 10px; padding: 3px; }
+  .seg button { border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 14px; font-weight: 500;
+    height: 32px; padding: 0 14px; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+  .seg button.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .seg svg { width: 15px; height: 15px; }
+  .actions { display: flex; gap: 6px; }
+  .btn { height: 38px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+    font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .btn:hover { border-color: var(--line-2); } .btn:disabled { opacity: .4; cursor: default; }
+  .btn.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+  .btn svg { width: 16px; height: 16px; }
+  .hint { font-size: 13px; color: var(--muted); text-align: center; min-height: 19px; }
+  .hint.bad { color: var(--bad); }
+  #makePane { display: none; } #makePane.show { display: inline-flex; }
+  kbd { font: inherit; font-size: 12px; padding: 0 5px; border: 1px solid var(--line-2); border-radius: 4px; color: var(--ink-2); }
+
+  /* modal + popover */
+  .scrim { position: fixed; inset: 0; background: rgba(10,10,12,.38); display: grid; place-items: center; z-index: 20; padding: 16px;
+    animation: fade .18s ease; }
+  .card { background: var(--surface); border-radius: 18px; box-shadow: var(--shadow); padding: 24px; width: 100%; max-width: 360px; }
+  .card h3 { margin: 0 0 6px; font-size: 19px; letter-spacing: -.02em; }
+  .card p { margin: 0 0 14px; color: var(--ink-2); font-size: 14px; }
+  .card .fine { font-size: 12.5px; color: var(--muted); margin: 10px 0 16px; }
+  .card label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .card input { width: 100%; height: 42px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--bg); color: var(--ink);
+    font: inherit; padding: 0 12px; outline: none; -webkit-user-select: text; user-select: text; }
+  .card input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .card .err { color: var(--bad); font-size: 13px; min-height: 18px; margin: 6px 0 0; }
+  .card .btns { display: flex; gap: 8px; align-items: center; }
+  .linkbtn { background: none; border: 0; color: var(--ink-2); font: inherit; font-size: 14px; cursor: pointer; padding: 8px; }
+  .linkbtn:hover { color: var(--ink); }
+  .shake { animation: shake .3s; }
+  .solved { text-align: center; }
+  .solved .big { font-size: 40px; font-weight: 700; letter-spacing: -.03em; margin: 2px 0 4px; }
+  .solved .save-line { font-size: 13px; color: var(--muted); min-height: 18px; margin: 4px 0 16px; }
+  .solved .save-line.good { color: var(--ok); } .solved .save-line.bad { color: var(--bad); }
+  .solved .btns { justify-content: center; }
+
+  .pop { position: absolute; right: 0; top: 42px; width: 300px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    box-shadow: var(--shadow); padding: 16px; z-index: 15; animation: fade .15s ease; }
+  .pop h4 { margin: 0; font-size: 16px; }
+  .pop .sub { margin: 2px 0 12px; font-size: 12.5px; color: var(--muted); }
+  .stats3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+  .stats3 div { background: var(--bg); border-radius: 10px; padding: 8px 10px; }
+  .stats3 span { display: block; font-size: 11.5px; color: var(--muted); }
+  .stats3 b { font-size: 17px; }
+  .mini { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 6px; }
+  .list { list-style: none; margin: 0 0 14px; padding: 0; font-size: 13.5px; max-height: 160px; overflow: auto; }
+  .list li { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--line); }
+  .list li:last-child { border-bottom: 0; }
+  .list small { color: var(--muted); }
+  .list .me { font-weight: 600; }
+
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--surface);
+    padding: 10px 16px; border-radius: 10px; font-size: 14px; z-index: 30; animation: fade .2s ease; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+  @media (max-width: 420px) { .seg button span.lbl-long { display: none; } .level { font-size: 23px; } .btn { padding: 0 11px; } }
 </style>
 </head>
 <body>
-<header>
-  <h1>Glasskat</h1>
-  <div class="stats">Level <span id="lvl">1</span> · <span id="filled">0</span>/<span id="total">0</span> squares</div>
-</header>
+<div class="wrap">
+  <div class="top">
+    <div class="brand">glass<span>kat</span></div>
+    <div class="top-right">
+      <button class="chip icon-btn" id="themeBtn" title="Switch light / dark" aria-label="Switch light or dark theme">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg>
+      </button>
+      <span id="acctWrap" hidden><button class="chip" id="acctBtn" aria-haspopup="true" aria-expanded="false"></button>
+        <div class="pop" id="acctPop" hidden></div></span>
+    </div>
+  </div>
 
-<div id="rules"></div>
-<canvas id="board"></canvas>
-<div id="msg"></div>
+  <div class="status">
+    <div class="level">Level <span id="lvl">1</span><small id="sq"></small></div>
+    <div class="timer" id="timer">0:00</div>
+  </div>
+  <div class="progress"><i id="bar"></i></div>
 
-<div class="controls">
-  <button id="undo">Undo (Z)</button>
-  <button id="clear">Clear</button>
-  <button id="skip">New board</button>
+  <div class="rules" id="rules"></div>
+
+  <div class="board-card"><canvas id="board" class="boxes"></canvas></div>
+  <div class="hint" id="hint"></div>
+
+  <div class="tools">
+    <div class="seg" role="tablist" aria-label="Input mode">
+      <button id="modeBoxes" class="on" title="Boxes (B)"><svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5" opacity=".35"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5" opacity=".35"/></svg>Boxes</button>
+      <button id="modeLines" title="Lines (L)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 2v12h12M8 2v6h6"/></svg>Lines</button>
+    </div>
+    <div class="actions">
+      <button class="btn primary" id="makePane">Make pane</button>
+      <button class="btn" id="undo" title="Undo (Z)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>Undo</button>
+      <button class="btn" id="clear" title="Clear the board">Clear</button>
+      <button class="btn" id="skip" title="Skip to a new board at this level">New</button>
+    </div>
+  </div>
+  <div class="hint" id="howto"></div>
 </div>
-<div class="help">
-  <b>Divide the whole window into panes</b> that obey every rule above.
-  <b>Drag</b> across empty squares to draw a pane. Drag from a pane to extend it. <b>Tap</b> a pane (or right-click) to remove it.
-  Rotated or mirrored shapes count as the same shape. A broken pane is striped red.
-</div>
-
-<div id="overlay"><div class="card">
-  <h2>Window complete!</h2>
-  <p id="ovText"></p>
-  <button id="cont">Continue (Space)</button>
-</div></div>
+<div id="modalSlot"></div>
 
 <script>
 (() => {
-  // ---------- RNG ----------
-  let seed = (Date.now() ^ 0x9e3779b9) >>> 0;
-  const rand = () => { seed = (seed + 0x6D2B79F5) >>> 0; let t = seed;
-    t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-  const ri = (a, b) => a + Math.floor(rand() * (b - a + 1));
-  const pick = a => a[ri(0, a.length - 1)];
-  const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = ri(0, i); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+"use strict";
+/* Accounts: the web app URL of the Google Sheet script (google-sheet/Code.gs).
+   Leave it empty and accounts stay hidden; the game still saves in this browser. */
+const API_URL = "";
 
-  const DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
-  const key = (x, y) => x + "," + y;
-  const unkey = k => k.split(",").map(Number);
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+  del(k) { try { localStorage.removeItem(k); } catch (e) {} },
+};
 
-  // ---------- Polyominoes ----------
-  function normalize(cells) {
-    const mx = Math.min(...cells.map(c => c[0])), my = Math.min(...cells.map(c => c[1]));
-    return cells.map(([x, y]) => [x - mx, y - my]).sort((a, b) => a[1] - b[1] || a[0] - b[0]);
-  }
-  const rotate = c => normalize(c.map(([x, y]) => [-y, x]));
-  const flip = c => normalize(c.map(([x, y]) => [-x, y]));
-  const sig = c => normalize(c).map(p => p.join(".")).join("|");
-  function orientations(cells) {
-    const out = new Map(); let s = normalize(cells);
-    for (let f = 0; f < 2; f++) { for (let r = 0; r < 4; r++) { out.set(sig(s), s); s = rotate(s); } s = flip(s); }
-    return [...out.values()];
-  }
-  const canon = c => orientations(c).map(sig).sort()[0];
-  const isRect = c => { const n = normalize(c); const w = Math.max(...n.map(p => p[0])) + 1, h = Math.max(...n.map(p => p[1])) + 1; return w * h === c.length; };
+/* ================= THEME ================= */
+(function theme() {
+  const saved = store.get("gk-theme");
+  if (saved) document.documentElement.dataset.theme = saved;
+  $("#themeBtn").addEventListener("click", () => {
+    const dark = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() === "#111113";
+    const next = dark ? "light" : "dark";
+    document.documentElement.dataset.theme = next; store.set("gk-theme", next); readColors(); draw();
+  });
+})();
 
-  // all free polyominoes up to size 6
-  const POLY = new Map(); // canon -> cells
-  (function enumerate() {
-    let layer = new Map([[canon([[0,0]]), [[0,0]]]]);
-    for (const [k, v] of layer) POLY.set(k, v);
-    for (let n = 2; n <= 6; n++) {
-      const next = new Map();
-      for (const cells of layer.values()) {
-        const set = new Set(cells.map(c => key(...c)));
-        for (const [x, y] of cells) for (const [dx, dy] of DIRS) {
-          if (set.has(key(x + dx, y + dy))) continue;
-          const nc = normalize([...cells, [x + dx, y + dy]]), k = canon(nc);
-          if (!next.has(k)) next.set(k, nc);
-        }
+/* ================= RNG + POLYOMINOES ================= */
+let seed = (Date.now() ^ 0x9e3779b9) >>> 0;
+const rand = () => { seed = (seed + 0x6D2B79F5) >>> 0; let t = seed;
+  t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+const ri = (a, b) => a + Math.floor(rand() * (b - a + 1));
+const pick = (a) => a[ri(0, a.length - 1)];
+const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = ri(0, i); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+const key = (x, y) => x + "," + y;
+const unkey = (k) => k.split(",").map(Number);
+
+function normalize(cells) {
+  const mx = Math.min(...cells.map((c) => c[0])), my = Math.min(...cells.map((c) => c[1]));
+  return cells.map(([x, y]) => [x - mx, y - my]).sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+}
+const rotate = (c) => normalize(c.map(([x, y]) => [-y, x]));
+const flip = (c) => normalize(c.map(([x, y]) => [-x, y]));
+const sig = (c) => normalize(c).map((p) => p.join(".")).join("|");
+function orientations(cells) {
+  const out = new Map(); let s = normalize(cells);
+  for (let f = 0; f < 2; f++) { for (let r = 0; r < 4; r++) { out.set(sig(s), s); s = rotate(s); } s = flip(s); }
+  return [...out.values()];
+}
+const canon = (c) => orientations(c).map(sig).sort()[0];
+const isRect = (c) => { const n = normalize(c); return (Math.max(...n.map((p) => p[0])) + 1) * (Math.max(...n.map((p) => p[1])) + 1) === c.length; };
+
+const POLY = new Map(); // every free polyomino up to 6 squares: canon -> cells
+(function enumerate() {
+  let layer = new Map([[canon([[0, 0]]), [[0, 0]]]]);
+  for (const [k, v] of layer) POLY.set(k, v);
+  for (let n = 2; n <= 6; n++) {
+    const next = new Map();
+    for (const cells of layer.values()) {
+      const set = new Set(cells.map((c) => key(...c)));
+      for (const [x, y] of cells) for (const [dx, dy] of DIRS) {
+        if (set.has(key(x + dx, y + dy))) continue;
+        const nc = normalize([...cells, [x + dx, y + dy]]), k = canon(nc);
+        if (!next.has(k)) next.set(k, nc);
       }
-      for (const [k, v] of next) POLY.set(k, v);
-      layer = next;
     }
-  })();
-  const S = str => canon(str.split(" ").map(p => p.split(",").map(Number))); // shape from "x,y x,y ..."
-  const SHAPES = {
-    I2: S("0,0 1,0"), I3: S("0,0 1,0 2,0"), L3: S("0,0 0,1 1,1"),
-    I4: S("0,0 1,0 2,0 3,0"), O4: S("0,0 1,0 0,1 1,1"), T4: S("0,0 1,0 2,0 1,1"),
-    S4: S("1,0 2,0 0,1 1,1"), L4: S("0,0 0,1 0,2 1,2"),
-    P5: S("0,0 1,0 0,1 1,1 0,2"), I5: S("0,0 1,0 2,0 3,0 4,0"), plus: S("1,0 0,1 1,1 2,1 1,2"),
-  };
-
-  // ---------- Rules ----------
-  // Per-pane rules: shapes, size, sizes, rect. Board-wide: distinct, count, nbsize.
-  function ruleText(r) {
-    switch (r.type) {
-      case "shapes": return r.shapes.length === 1 ? "Every pane is this shape" : "Every pane is one of these";
-      case "size": return `Every pane has exactly ${r.n} squares`;
-      case "sizes": return `Every pane has ${r.set.slice(0, -1).join(", ")} or ${r.set.at(-1)} squares`;
-      case "rect": return "Every pane is a rectangle (2+ squares)";
-      case "distinct": return "No two panes share a shape";
-      case "count": return `Use exactly ${r.k} panes`;
-      case "nbsize": return "Touching panes differ in size";
-    }
+    for (const [k, v] of next) POLY.set(k, v);
+    layer = next;
   }
-  function paneOk(r, cells) {
-    switch (r.type) {
-      case "shapes": return r.shapes.includes(canon(cells));
-      case "size": return cells.length === r.n;
-      case "sizes": return r.set.includes(cells.length);
-      case "rect": return cells.length >= 2 && isRect(cells);
-      default: return true;
-    }
-  }
-  const PER_PANE = new Set(["shapes", "size", "sizes", "rect"]);
+})();
+const S = (str) => canon(str.split(" ").map((p) => p.split(",").map(Number)));
+const SHAPES = {
+  I3: S("0,0 1,0 2,0"), L3: S("0,0 0,1 1,1"),
+  I4: S("0,0 1,0 2,0 3,0"), O4: S("0,0 1,0 0,1 1,1"), T4: S("0,0 1,0 2,0 1,1"), S4: S("1,0 2,0 0,1 1,1"), L4: S("0,0 0,1 0,2 1,2"),
+  P5: S("0,0 1,0 0,1 1,1 0,2"), plus: S("1,0 0,1 1,1 2,1 1,2"), U5: S("0,0 2,0 0,1 1,1 2,1"),
+};
 
-  // Shapes the generator may use, given the per-pane rules.
-  function pool(rules) {
-    let list = [...POLY.entries()].filter(([, c]) => c.length >= 2 && c.length <= 6);
-    const pr = rules.filter(r => PER_PANE.has(r.type));
-    if (!pr.some(r => r.type !== "rect")) list = list.filter(([, c]) => c.length <= 5);
-    return list.filter(([, c]) => pr.every(r => paneOk(r, c)));
+/* ================= RULES ================= */
+const PER_PANE = new Set(["shapes", "size", "sizes", "rect"]);
+function ruleText(r) {
+  switch (r.type) {
+    case "shapes": return r.shapes.length === 1 ? "Every pane is this shape" : "Every pane is one of these shapes";
+    case "size": return `Every pane has ${r.n} squares`;
+    case "sizes": return `Every pane has ${r.set.slice(0, -1).join(", ")} or ${r.set.at(-1)} squares`;
+    case "rect": return "Every pane is a rectangle of 2+ squares";
+    case "distinct": return "No two panes are the same shape";
+    case "count": return `Exactly ${r.k} panes`;
+    case "nbsize": return "Touching panes are different sizes";
   }
+  return "";
+}
+function paneOk(r, cells) {
+  switch (r.type) {
+    case "shapes": return cells.length <= 6 && r.shapes.includes(canon(cells));
+    case "size": return cells.length === r.n;
+    case "sizes": return r.set.includes(cells.length);
+    case "rect": return cells.length >= 2 && isRect(cells);
+  }
+  return true;
+}
+function pool(rules) {
+  let list = [...POLY.entries()].filter(([, c]) => c.length >= 2);
+  const pr = rules.filter((r) => PER_PANE.has(r.type));
+  if (!pr.some((r) => r.type !== "rect")) list = list.filter(([, c]) => c.length <= 5);
+  return list.filter(([, c]) => pr.every((r) => paneOk(r, c)));
+}
 
-  // ---------- Levels ----------
-  const LEVELS = [
-    { rules: [{ type: "shapes", shapes: [SHAPES.I3] }], target: 12 },
-    { rules: [{ type: "shapes", shapes: [SHAPES.L3] }], target: 15 },
-    { rules: [{ type: "shapes", shapes: [SHAPES.I3, SHAPES.L3] }], target: 18 },
-    { rules: [{ type: "size", n: 4 }], target: 20 },
-    { rules: [{ type: "rect" }, { type: "count", k: 0 }], target: 22 },
-    { rules: [{ type: "size", n: 4 }, { type: "distinct" }], target: 20 },
-    { rules: [{ type: "sizes", set: [2, 3, 4] }, { type: "nbsize" }], target: 22 },
-    { rules: [{ type: "shapes", shapes: [SHAPES.T4, SHAPES.L4, SHAPES.S4] }], target: 28 },
-    { rules: [{ type: "size", n: 5 }], target: 30 },
-    { rules: [{ type: "sizes", set: [3, 4, 5] }, { type: "distinct" }, { type: "count", k: 0 }], target: 30 },
+/* ================= LEVELS + GENERATION ================= */
+const LEVELS = [
+  { rules: [{ type: "shapes", shapes: [SHAPES.I3] }], target: 12 },
+  { rules: [{ type: "shapes", shapes: [SHAPES.L3] }], target: 15 },
+  { rules: [{ type: "shapes", shapes: [SHAPES.I3, SHAPES.L3] }], target: 18 },
+  { rules: [{ type: "size", n: 4 }], target: 20 },
+  { rules: [{ type: "rect" }, { type: "count", k: 0 }], target: 22 },
+  { rules: [{ type: "size", n: 4 }, { type: "distinct" }], target: 20 },
+  { rules: [{ type: "sizes", set: [2, 3, 4] }, { type: "nbsize" }], target: 22 },
+  { rules: [{ type: "shapes", shapes: [SHAPES.T4, SHAPES.L4, SHAPES.S4] }], target: 28 },
+  { rules: [{ type: "size", n: 5 }], target: 30 },
+  { rules: [{ type: "sizes", set: [3, 4, 5] }, { type: "distinct" }, { type: "count", k: 0 }], target: 30 },
+];
+function randomLevel(l) {
+  const t = Math.min(26 + (l - 10) * 2, 44);
+  const templates = [
+    () => [{ type: "shapes", shapes: shuffle(Object.values(SHAPES)).slice(0, ri(1, 3)) }],
+    () => [{ type: "size", n: ri(3, 5) }],
+    () => [{ type: "size", n: ri(4, 5) }, { type: "distinct" }],
+    () => [{ type: "sizes", set: pick([[2, 3, 4], [3, 4, 5], [2, 4], [3, 5]]) }, { type: "nbsize" }],
+    () => [{ type: "rect" }, { type: "count", k: 0 }, { type: "nbsize" }],
+    () => [{ type: "sizes", set: [3, 4, 5] }, { type: "distinct" }, { type: "nbsize" }],
   ];
-  function randomLevel(l) {
-    const t = Math.min(26 + (l - 10) * 2, 44);
-    const templates = [
-      () => [{ type: "shapes", shapes: shuffle(Object.values(SHAPES).filter(s => POLY.get(s).length >= 3)).slice(0, ri(1, 3)) }],
-      () => [{ type: "size", n: ri(3, 5) }],
-      () => [{ type: "size", n: ri(4, 5) }, { type: "distinct" }],
-      () => [{ type: "sizes", set: pick([[2, 3, 4], [3, 4, 5], [2, 4], [3, 5]]) }, { type: "nbsize" }],
-      () => [{ type: "rect" }, { type: "count", k: 0 }, { type: "nbsize" }],
-      () => [{ type: "sizes", set: [3, 4, 5] }, { type: "distinct" }, { type: "nbsize" }],
-    ];
-    return { rules: pick(templates)(), target: t };
-  }
-  const levelDef = l => (l <= LEVELS.length ? LEVELS[l - 1] : randomLevel(l));
+  return { rules: pick(templates)(), target: t };
+}
+const levelDef = (l) => (l <= LEVELS.length ? LEVELS[l - 1] : randomLevel(l));
 
-  // ---------- Board generation ----------
-  // Grow a board by laying down panes that already satisfy the rules, so a solution always exists.
-  function generate(def) {
-    const rules = def.rules.map(r => ({ ...r }));
-    const shapes = pool(rules);
-    const distinct = rules.some(r => r.type === "distinct"), nb = rules.some(r => r.type === "nbsize");
-    let best = null;
-    for (let attempt = 0; attempt < 60; attempt++) {
-      const owner = new Map(), panes = [], used = new Set();
-      let filled = 0;
-      const tryPlace = (cellsAbs, k) => {
-        if (cellsAbs.some(c => owner.has(key(...c)))) return false;
-        if (nb) for (const [x, y] of cellsAbs) for (const [dx, dy] of DIRS) {
-          const o = owner.get(key(x + dx, y + dy)); if (o !== undefined && panes[o].length === cellsAbs.length) return false; }
-        const id = panes.length; panes.push(cellsAbs); cellsAbs.forEach(c => owner.set(key(...c), id));
-        used.add(k); filled += cellsAbs.length; return true;
-      };
-      const avail = () => shapes.filter(([k]) => !distinct || !used.has(k));
-      { const [k, c] = pick(avail()); tryPlace(pick(orientations(c)), k); }
-      let fails = 0;
-      while (filled < def.target && fails < 400) {
-        const a = avail(); if (!a.length) break;
-        // pick an empty cell next to the board, favouring snug spots for a compact window
-        const front = new Map();
-        for (const k of owner.keys()) { const [x, y] = unkey(k);
-          for (const [dx, dy] of DIRS) { const nk = key(x + dx, y + dy); if (!owner.has(nk)) front.set(nk, (front.get(nk) || 0) + 1); } }
-        const fr = [...front.entries()]; fr.sort((p, q) => q[1] - p[1] || rand() - .5);
-        const [ek] = rand() < .7 ? fr[ri(0, Math.min(3, fr.length - 1))] : pick(fr);
-        const [ex, ey] = unkey(ek);
-        const [k, c] = pick(a), o = pick(orientations(c)), [ax, ay] = pick(o);
-        const abs = o.map(([x, y]) => [x - ax + ex, y - ay + ey]);
-        if (filled + abs.length > def.target + 2 || !tryPlace(abs, k)) fails++;
+// Grow a board out of panes that already obey the rules, so every board can be solved.
+function generate(def) {
+  const rules = def.rules.map((r) => ({ ...r }));
+  const shapes = pool(rules);
+  const distinct = rules.some((r) => r.type === "distinct"), nb = rules.some((r) => r.type === "nbsize");
+  let best = null;
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const owner = new Map(), panes = [], used = new Set();
+    let filled = 0;
+    const tryPlace = (abs, k) => {
+      if (abs.some((c) => owner.has(key(...c)))) return false;
+      if (nb) for (const [x, y] of abs) for (const [dx, dy] of DIRS) {
+        const o = owner.get(key(x + dx, y + dy)); if (o !== undefined && panes[o].length === abs.length) return false; }
+      const id = panes.length; panes.push(abs); abs.forEach((c) => owner.set(key(...c), id));
+      used.add(k); filled += abs.length; return true;
+    };
+    const avail = () => shapes.filter(([k]) => !distinct || !used.has(k));
+    { const [k, c] = pick(avail()); tryPlace(pick(orientations(c)), k); }
+    let fails = 0;
+    while (filled < def.target && fails < 400) {
+      const a = avail(); if (!a.length) break;
+      const front = new Map();
+      for (const k of owner.keys()) { const [x, y] = unkey(k);
+        for (const [dx, dy] of DIRS) { const nk = key(x + dx, y + dy); if (!owner.has(nk)) front.set(nk, (front.get(nk) || 0) + 1); } }
+      const fr = [...front.entries()]; fr.sort((p, q) => q[1] - p[1] || rand() - 0.5);
+      const [ek] = rand() < 0.7 ? fr[ri(0, Math.min(3, fr.length - 1))] : pick(fr);
+      const [ex, ey] = unkey(ek);
+      const [k, c] = pick(a), o = pick(orientations(c)), [ax, ay] = pick(o);
+      const abs = o.map(([x, y]) => [x - ax + ex, y - ay + ey]);
+      if (filled + abs.length > def.target + 2 || !tryPlace(abs, k)) fails++;
+    }
+    const score = Math.abs(filled - def.target);
+    if (!best || score < best.score) best = { panes, score };
+    if (score <= 2) break;
+  }
+  const all = best.panes.flat(), mx = Math.min(...all.map((c) => c[0])), my = Math.min(...all.map((c) => c[1]));
+  const solution = best.panes.map((p) => p.map(([x, y]) => [x - mx, y - my]));
+  for (const r of rules) if (r.type === "count") r.k = solution.length;
+  return { cells: solution.flat().sort((a, b) => a[1] - b[1] || a[0] - b[0]), rules, solution };
+}
+
+/* ================= GAME STATE =================
+   The board is a set of walls between neighbouring squares. Every connected
+   group of squares (the frame plus walls around it) is a region; a region that
+   obeys the per-pane rules is a finished pane and turns to glass. */
+let level = 1, cells = [], cellSet = new Set(), W = 0, H = 0, rules = [], solution = [];
+let walls = new Set(), history = [], regions = [], regionOf = new Map(), evalState = null;
+let mode = store.get("gk-mode") === "lines" ? "lines" : "boxes";
+let elapsed = 0, startedAt = 0, solvedFlag = false;
+
+// edge ids: "x,y,r" is the wall right of square (x,y); "x,y,d" the wall below it
+const edgeR = (x, y) => `${x},${y},r`, edgeD = (x, y) => `${x},${y},d`;
+function edgeBetween(a, b) {
+  const [ax, ay] = a, [bx, by] = b;
+  if (ay === by && Math.abs(ax - bx) === 1) return edgeR(Math.min(ax, bx), ay);
+  if (ax === bx && Math.abs(ay - by) === 1) return edgeD(ax, Math.min(ay, by));
+  return null;
+}
+const isInner = (id) => { const [x, y, t] = id.split(","); const X = +x, Y = +y;
+  return cellSet.has(key(X, Y)) && cellSet.has(t === "r" ? key(X + 1, Y) : key(X, Y + 1)); };
+
+function computeRegions() {
+  regions = []; regionOf = new Map();
+  for (const [sx, sy] of cells) {
+    const k0 = key(sx, sy); if (regionOf.has(k0)) continue;
+    const id = regions.length, list = [], st = [[sx, sy]]; regionOf.set(k0, id);
+    while (st.length) {
+      const [x, y] = st.pop(); list.push([x, y]);
+      for (const [dx, dy] of DIRS) {
+        const nx = x + dx, ny = y + dy, nk = key(nx, ny);
+        if (!cellSet.has(nk) || regionOf.has(nk) || walls.has(edgeBetween([x, y], [nx, ny]))) continue;
+        regionOf.set(nk, id); st.push([nx, ny]);
       }
-      const score = Math.abs(filled - def.target);
-      if (!best || score < best.score) best = { panes, score };
-      if (score <= 2) break;
     }
-    const cells = normalize(best.panes.flat());
-    for (const r of rules) if (r.type === "count") r.k = best.panes.length;
-    return { cells, rules, solution: best.panes };
+    regions.push(list);
   }
+}
 
-  // ---------- Glass drawing ----------
-  const PALETTE = ["#5ec8f2","#f26d6d","#f2c14e","#7ee08a","#b48cf2","#f29bd0","#5ef2c8","#f2985e","#8fa8ff","#d6f25e","#c9a27a","#7af2f2"];
-  const shapeColor = new Map();
-  function colorFor(cells) {
-    if (rules.some(r => r.type === "nbsize")) return PALETTE[(cells.length * 3) % PALETTE.length];
-    const k = canon(cells);
-    if (!shapeColor.has(k)) shapeColor.set(k, PALETTE[shapeColor.size % PALETTE.length]);
-    return shapeColor.get(k);
+function evaluate() {
+  const valid = regions.map((c) => rules.filter((r) => PER_PANE.has(r.type)).every((r) => paneOk(r, c)));
+  const conflict = new Set(), status = [];
+  const validCells = regions.reduce((s, c, i) => s + (valid[i] ? c.length : 0), 0);
+  const allValid = valid.every(Boolean);
+  for (const r of rules) {
+    let bad = false, extra = "";
+    if (PER_PANE.has(r.type)) {
+      // a region that's too big is still being split, so per-pane rules only turn green, never red
+    } else if (r.type === "distinct") {
+      const seen = new Map();
+      regions.forEach((c, i) => { if (!valid[i]) return; const k = canon(c);
+        if (seen.has(k)) { conflict.add(i); conflict.add(seen.get(k)); bad = true; } else seen.set(k, i); });
+    } else if (r.type === "nbsize") {
+      regions.forEach((c, i) => { if (!valid[i]) return;
+        for (const [x, y] of c) for (const [dx, dy] of DIRS) {
+          const o = regionOf.get(key(x + dx, y + dy));
+          if (o !== undefined && o !== i && valid[o] && regions[o].length === c.length) { conflict.add(i); bad = true; } } });
+    } else if (r.type === "count") {
+      const n = regions.filter((_, i) => valid[i]).length;
+      extra = ` · ${n}/${r.k}`;
+      bad = n > r.k;
+    }
+    const ok = !bad && allValid && (r.type !== "count" || regions.length === r.k);
+    status.push({ state: bad ? "bad" : ok ? "ok" : "open", extra });
   }
-  function shade(hex, amt) { const n = parseInt(hex.slice(1), 16), f = v => Math.max(0, Math.min(255, v + amt));
-    return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`; }
-  function glassCell(c, x, y, s, color) {
-    const g = c.createLinearGradient(x, y, x + s, y + s);
-    g.addColorStop(0, shade(color, 40)); g.addColorStop(.55, color); g.addColorStop(1, shade(color, -35));
-    c.fillStyle = g; c.fillRect(x, y, s, s);
-    c.fillStyle = "rgba(255,255,255,.28)";
-    c.beginPath(); c.moveTo(x + s * .12, y + s * .12); c.lineTo(x + s * .55, y + s * .12); c.lineTo(x + s * .12, y + s * .55); c.fill();
-  }
-  function hatch(c, x, y, s) {
-    c.save(); c.beginPath(); c.rect(x, y, s, s); c.clip();
-    c.strokeStyle = "rgba(255,60,60,.8)"; c.lineWidth = Math.max(2, s * .08);
-    for (let i = -s; i < s; i += s / 3) { c.beginPath(); c.moveTo(x + i, y + s); c.lineTo(x + i + s, y); c.stroke(); }
-    c.restore();
-  }
-  function outline(c, set, ox, oy, s, width, color) {
-    c.strokeStyle = color; c.lineWidth = width; c.lineCap = "round"; c.beginPath();
-    for (const k of set) { const [x, y] = unkey(k), px = ox + x * s, py = oy + y * s;
-      if (!set.has(key(x, y - 1))) { c.moveTo(px, py); c.lineTo(px + s, py); }
-      if (!set.has(key(x, y + 1))) { c.moveTo(px, py + s); c.lineTo(px + s, py + s); }
-      if (!set.has(key(x - 1, y))) { c.moveTo(px, py); c.lineTo(px, py + s); }
-      if (!set.has(key(x + 1, y))) { c.moveTo(px + s, py); c.lineTo(px + s, py + s); } }
-    c.stroke();
-  }
-  function shapeIcon(cells, s = 11) {
-    const n = normalize(cells), w = Math.max(...n.map(c => c[0])) + 1, h = Math.max(...n.map(c => c[1])) + 1;
-    const cv = document.createElement("canvas"), dpr = window.devicePixelRatio || 1;
-    cv.width = (w * s + 4) * dpr; cv.height = (h * s + 4) * dpr; cv.style.width = (w * s + 4) + "px"; cv.style.height = (h * s + 4) + "px";
-    const c = cv.getContext("2d"); c.setTransform(dpr, 0, 0, dpr, 0, 0);
-    for (const [x, y] of n) glassCell(c, 2 + x * s, 2 + y * s, s, "#cfd6ea");
-    outline(c, new Set(n.map(p => key(...p))), 2, 2, s, 1.5, "#11131a");
-    return cv;
-  }
+  const win = allValid && conflict.size === 0 && status.every((s) => s.state === "ok");
+  return { valid, conflict, status, validCells, win };
+}
 
-  // ---------- State ----------
-  let level = 1, cells, cellSet, W, H, rules, panes, owner, history, draw = null;
+function changed(record = true) {
+  computeRegions(); evalState = evaluate();
+  if (record) { touchTimer(); persist(); }
+  draw(); paintRules(); paintStatus();
+  if (evalState.win && !solvedFlag) { solvedFlag = true; onSolved(); }
+}
+function pushHistory() { history.push([...walls]); if (history.length > 300) history.shift(); }
 
-  function newLevel(l) {
-    level = l;
-    const g = generate(levelDef(level));
-    cells = g.cells; rules = g.rules; window.__solution = g.solution;
-    cellSet = new Set(cells.map(c => key(...c)));
-    W = Math.max(...cells.map(c => c[0])) + 1; H = Math.max(...cells.map(c => c[1])) + 1;
-    panes = []; history = []; shapeColor.clear(); rebuildOwner();
-    buildRules(); hideOverlay(); setMsg(""); resize(); update();
-  }
-  function rebuildOwner() { owner = new Map(); panes.forEach((p, i) => p.forEach(c => owner.set(c, i))); }
-  function snapshot() { history.push(panes.map(p => p.slice())); if (history.length > 200) history.shift(); }
+/* ================= LOAD / NEW ================= */
+function loadPuzzle(p, wallList, secs) {
+  level = p.level; cells = p.cells; rules = p.rules; solution = p.solution || [];
+  cellSet = new Set(cells.map((c) => key(...c)));
+  W = Math.max(...cells.map((c) => c[0])) + 1; H = Math.max(...cells.map((c) => c[1])) + 1;
+  walls = new Set((wallList || []).filter(isInner)); history = []; selection = []; solvedFlag = false;
+  elapsed = secs || 0; startedAt = 0;
+  shapeColor.clear(); buildRules(); resize();
+  const bar = $("#bar"); bar.style.transition = "none"; changed(false); void bar.offsetWidth; bar.style.transition = "";
+  paintTimer();
+  setHint("");
+}
+function newPuzzle(l) {
+  const g = generate(levelDef(l));
+  loadPuzzle({ level: l, cells: g.cells, rules: g.rules, solution: g.solution }, [], 0);
+  persist();
+}
+const snapshotState = () => ({ v: 1, level, cells, rules, solution, walls: [...walls], elapsed: currentElapsed(), mode });
+function persist() { store.set("gk-state", snapshotState()); markDirty(); }
 
-  // ---------- Evaluation ----------
-  function evaluate() {
-    const paneCells = panes.map(p => p.map(unkey));
-    const badPane = new Set(), status = [];
-    const full = owner.size === cells.length;
-    for (const r of rules) {
-      let bad = false, extra = "";
-      if (PER_PANE.has(r.type)) paneCells.forEach((c, i) => { if (!paneOk(r, c)) { badPane.add(i); bad = true; } });
-      else if (r.type === "distinct") {
-        const seen = new Map();
-        paneCells.forEach((c, i) => { const k = canon(c); if (seen.has(k)) { badPane.add(i); badPane.add(seen.get(k)); bad = true; } else seen.set(k, i); });
-      } else if (r.type === "nbsize") {
-        panes.forEach((p, i) => { for (const k of p) { const [x, y] = unkey(k);
-          for (const [dx, dy] of DIRS) { const o = owner.get(key(x + dx, y + dy));
-            if (o !== undefined && o !== i && panes[o].length === p.length) { badPane.add(i); bad = true; } } } });
-      } else if (r.type === "count") {
-        extra = ` (${panes.length}/${r.k})`;
-        bad = panes.length > r.k || (full && panes.length !== r.k);
+/* ================= TIMER ================= */
+const currentElapsed = () => Math.round(elapsed + (startedAt ? (Date.now() - startedAt) / 1000 : 0));
+function touchTimer() { if (!startedAt && !solvedFlag && document.visibilityState !== "hidden") startedAt = Date.now(); }
+function pauseTimer() { if (startedAt) { elapsed += (Date.now() - startedAt) / 1000; startedAt = 0; } }
+const fmtTime = (s) => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, ss = s % 60;
+  return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(ss).padStart(2, "0"); };
+function paintTimer() { $("#timer").textContent = fmtTime(currentElapsed()); }
+setInterval(paintTimer, 500);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") { pauseTimer(); persist(); if (dirty) saveProgress(true); }
+  else if (history.length && !solvedFlag) touchTimer();
+});
+
+/* ================= DRAWING ================= */
+const board = $("#board"), ctx = board.getContext("2d");
+let CS = 44, PAD = 8, C = {};
+function readColors() {
+  const cs = getComputedStyle(document.documentElement), v = (n) => cs.getPropertyValue(n).trim();
+  C = { surface: v("--surface"), ink: v("--ink"), muted: v("--muted"), line: v("--line"), wall: v("--wall"), accent: v("--accent"),
+    accentSoft: v("--accent-soft"), bad: v("--bad"), badSoft: v("--bad-soft"), bg: v("--bg") };
+  C.dark = C.bg === "#111113";
+}
+readColors();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { readColors(); draw(); });
+
+// soft glass tints, light and dark
+const TINTS_L = ["#cfe3ff", "#ffd9d2", "#fff0bf", "#d5f2dc", "#e6dcff", "#ffd9ec", "#c9f1ee", "#ffe2c7", "#dfe6ee", "#eaf5c4"];
+const TINTS_D = ["#24406b", "#5b2d2a", "#5a4a1c", "#1f4a2f", "#3d3266", "#5a2843", "#1d4a47", "#5b3a1e", "#323b47", "#3f4a1d"];
+const shapeColor = new Map();
+function tintFor(c) {
+  const T = C.dark ? TINTS_D : TINTS_L;
+  if (rules.some((r) => r.type === "nbsize")) return T[(c.length * 3) % T.length];
+  const k = canon(c);
+  if (!shapeColor.has(k)) shapeColor.set(k, shapeColor.size % T.length);
+  return T[shapeColor.get(k)];
+}
+
+function resize() {
+  const maxW = Math.min(window.innerWidth - 32, 560), maxH = Math.max(240, window.innerHeight * 0.52);
+  CS = Math.max(26, Math.min(58, Math.floor(Math.min((maxW - PAD * 2) / W, (maxH - PAD * 2) / H))));
+  PAD = Math.max(6, Math.round(CS * 0.14));
+  const dpr = window.devicePixelRatio || 1, pw = W * CS + PAD * 2, ph = H * CS + PAD * 2;
+  board.width = Math.round(pw * dpr); board.height = Math.round(ph * dpr); board.style.width = pw + "px"; board.style.height = ph + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+const X = (x) => PAD + x * CS, Y = (y) => PAD + y * CS;
+
+let solveAnim = 0;
+function draw() {
+  if (!cells.length) return;
+  const ev = evalState, now = performance.now();
+  ctx.clearRect(0, 0, W * CS + PAD * 2, H * CS + PAD * 2);
+  const selSet = new Set(selection);
+  // squares
+  regions.forEach((reg, i) => {
+    let fill = C.surface;
+    if (ev.conflict.has(i)) fill = C.badSoft;
+    else if (ev.valid[i]) fill = tintFor(reg);
+    for (const [x, y] of reg) {
+      ctx.fillStyle = C.surface; ctx.fillRect(X(x), Y(y), CS, CS);
+      if (fill !== C.surface) {
+        let a = 1;
+        if (solveAnim) { const d = (now - solveAnim - (x + y) * 35) / 260; a = d < 0 ? 0.55 : Math.min(1, 0.55 + d * 0.45); }
+        ctx.globalAlpha = a; ctx.fillStyle = fill; ctx.fillRect(X(x), Y(y), CS, CS); ctx.globalAlpha = 1;
       }
-      status.push({ state: bad ? "bad" : full ? "ok" : "open", extra });
+      if (selSet.has(key(x, y))) { ctx.fillStyle = C.accentSoft; ctx.fillRect(X(x), Y(y), CS, CS); }
     }
-    return { badPane, status, full, win: full && status.every(s => s.state === "ok") };
-  }
-
-  // ---------- Rendering ----------
-  const board = document.getElementById("board"), ctx = board.getContext("2d");
-  let CS = 48; const PAD = 14;
-  function resize() {
-    const maxW = Math.min(window.innerWidth - 32, 560), maxH = Math.max(260, window.innerHeight * .58);
-    CS = Math.max(24, Math.min(64, Math.floor(Math.min((maxW - PAD * 2) / W, (maxH - PAD * 2) / H))));
-    const dpr = window.devicePixelRatio || 1, pw = W * CS + PAD * 2, ph = H * CS + PAD * 2;
-    board.width = pw * dpr; board.height = ph * dpr; board.style.width = pw + "px"; board.style.height = ph + "px";
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  }
-  const ruleEls = [];
-  function buildRules() {
-    const box = document.getElementById("rules"); box.innerHTML = ""; ruleEls.length = 0;
-    for (const r of rules) {
-      const el = document.createElement("div"); el.className = "rule";
-      const mark = document.createElement("span"); mark.className = "mark"; mark.textContent = "•";
-      const txt = document.createElement("span"); txt.textContent = ruleText(r);
-      el.append(mark, txt);
-      if (r.type === "shapes") { const sh = document.createElement("span"); sh.className = "shapes";
-        r.shapes.forEach(s => sh.appendChild(shapeIcon(POLY.get(s)))); el.appendChild(sh); }
-      box.appendChild(el); ruleEls.push({ el, mark, txt, r });
-    }
-  }
-  function update() {
-    const ev = evaluate();
-    ctx.clearRect(0, 0, W * CS + PAD * 2, H * CS + PAD * 2);
-    for (const [x, y] of cells) {
-      ctx.fillStyle = "#2a3042"; ctx.fillRect(PAD + x * CS, PAD + y * CS, CS, CS);
-      ctx.strokeStyle = "#3a4157"; ctx.lineWidth = 1; ctx.strokeRect(PAD + x * CS + .5, PAD + y * CS + .5, CS - 1, CS - 1);
-    }
-    panes.forEach((p, i) => {
-      if (draw && draw.index === i) return;
-      const color = colorFor(p.map(unkey));
-      for (const k of p) { const [x, y] = unkey(k); glassCell(ctx, PAD + x * CS, PAD + y * CS, CS, color);
-        if (ev.badPane.has(i)) hatch(ctx, PAD + x * CS, PAD + y * CS, CS); }
-      outline(ctx, new Set(p), PAD, PAD, CS, Math.max(2, CS * .09), "#11131a");
-    });
-    if (draw) {
-      for (const k of draw.cells) { const [x, y] = unkey(k); glassCell(ctx, PAD + x * CS, PAD + y * CS, CS, "#cfd6ea"); }
-      outline(ctx, new Set(draw.cells), PAD, PAD, CS, 3, "#ffffff");
-      const n = draw.cells.length, [lx, ly] = unkey(draw.cells.at(-1));
-      ctx.fillStyle = "#11131a"; ctx.font = `700 ${Math.round(CS * .42)}px system-ui,sans-serif`;
-      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(n, PAD + (lx + .5) * CS, PAD + (ly + .5) * CS);
-    }
-    outline(ctx, cellSet, PAD, PAD, CS, Math.max(4, CS * .14), "#9aa3bd");
-    ruleEls.forEach((re, i) => { const s = ev.status[i];
-      re.el.className = "rule " + (s.state === "open" ? "" : s.state);
-      re.mark.textContent = s.state === "ok" ? "✓" : s.state === "bad" ? "✗" : "•";
-      re.txt.textContent = ruleText(re.r) + s.extra; });
-    document.getElementById("lvl").textContent = level;
-    document.getElementById("filled").textContent = owner.size;
-    document.getElementById("total").textContent = cells.length;
-    document.getElementById("undo").disabled = !history.length;
-    if (ev.full && !ev.win && !draw) setMsg("The window is full, but some rules are broken.", "bad");
-    else if (!draw) setMsg("");
-    return ev;
-  }
-  const msg = document.getElementById("msg");
-  function setMsg(t, cls = "") { msg.textContent = t; msg.style.color = cls === "bad" ? "var(--bad)" : ""; }
-
-  // ---------- Drawing input ----------
-  function cellAt(ev) {
-    const r = board.getBoundingClientRect();
-    const x = Math.floor((ev.clientX - r.left - PAD) / CS), y = Math.floor((ev.clientY - r.top - PAD) / CS);
-    return cellSet.has(key(x, y)) ? key(x, y) : null;
-  }
-  const adjacentTo = (k, list) => { const [x, y] = unkey(k); return list.some(o => { const [a, b] = unkey(o); return Math.abs(a - x) + Math.abs(b - y) === 1; }); };
-
-  board.addEventListener("pointerdown", ev => {
-    if (overlayAction) return;
-    const k = cellAt(ev); if (!k) return;
-    ev.preventDefault();
-    if (ev.button === 2) { const i = owner.get(k); if (i !== undefined) removePane(i); return; }
-    if (ev.button !== 0) return;
-    board.setPointerCapture(ev.pointerId);
-    const i = owner.get(k);
-    if (i !== undefined) draw = { index: i, cells: panes[i].slice(), start: k, moved: false, base: panes[i].length };
-    else draw = { index: -1, cells: [k], start: k, moved: false, base: 0 };
-    update();
   });
-  board.addEventListener("pointermove", ev => {
-    if (!draw) return;
-    const k = cellAt(ev); if (!k || k === draw.cells.at(-1)) return;
-    const c = draw.cells;
-    // moving over squares already in the pane is free, so T and + shapes can be drawn in one drag
-    if (!c.includes(k) && !owner.has(k) && adjacentTo(k, c)) { c.push(k); draw.moved = true; }
-    update();
-  });
-  function finishDraw() {
-    if (!draw) return;
-    const d = draw; draw = null;
-    if (d.index >= 0) {
-      if (!d.moved) { removePane(d.index); return; }       // tap on a pane removes it
-      if (d.cells.length !== panes[d.index].length) { snapshot(); panes[d.index] = d.cells; }
-    } else { snapshot(); panes.push(d.cells); }
-    rebuildOwner(); afterChange();
+  // thin grid lines inside regions
+  ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.beginPath();
+  for (const [x, y] of cells) {
+    if (cellSet.has(key(x + 1, y)) && !walls.has(edgeR(x, y)) && regionOf.get(key(x, y)) === regionOf.get(key(x + 1, y))) {
+      ctx.moveTo(X(x + 1) + .5, Y(y)); ctx.lineTo(X(x + 1) + .5, Y(y + 1)); }
+    if (cellSet.has(key(x, y + 1)) && !walls.has(edgeD(x, y)) && regionOf.get(key(x, y)) === regionOf.get(key(x, y + 1))) {
+      ctx.moveTo(X(x), Y(y + 1) + .5); ctx.lineTo(X(x + 1), Y(y + 1) + .5); }
   }
-  board.addEventListener("pointerup", finishDraw);
-  board.addEventListener("pointercancel", () => { draw = null; update(); });
-  board.addEventListener("contextmenu", ev => ev.preventDefault());
-
-  function removePane(i) { snapshot(); panes.splice(i, 1); rebuildOwner(); afterChange(); }
-  function afterChange() { const ev = update(); if (ev.win) setTimeout(win, 250); }
-  function undo() { if (!history.length || draw) return; panes = history.pop(); rebuildOwner(); update(); }
-  document.getElementById("undo").onclick = undo;
-  document.getElementById("clear").onclick = () => { if (!panes.length) return; snapshot(); panes = []; rebuildOwner(); update(); };
-  document.getElementById("skip").onclick = () => newLevel(level);
-
-  // ---------- Overlay ----------
-  const overlay = document.getElementById("overlay"); let overlayAction = null;
-  function hideOverlay() { overlay.classList.remove("show"); overlayAction = null; }
-  function win() { if (!evaluate().win) return;
-    document.getElementById("ovText").textContent = `Level ${level}: ${panes.length} panes, every rule satisfied.`;
-    overlayAction = () => newLevel(level + 1); overlay.classList.add("show"); }
-  document.getElementById("cont").onclick = () => overlayAction && overlayAction();
-  window.addEventListener("keydown", ev => {
-    if (ev.code === "Space" || ev.code === "Enter") { if (overlayAction) { ev.preventDefault(); overlayAction(); } return; }
-    if (overlayAction) return;
-    if (ev.key.toLowerCase() === "z") undo();
+  ctx.stroke();
+  // walls: every user line, plus the frame
+  const wallW = Math.max(2, CS * 0.06), frameW = Math.max(2.5, CS * 0.075);
+  ctx.lineCap = "round"; ctx.strokeStyle = C.wall;
+  ctx.lineWidth = wallW; ctx.beginPath();
+  for (const id of walls) { const [x, y, t] = id.split(","), a = +x, b = +y;
+    if (t === "r") { ctx.moveTo(X(a + 1), Y(b)); ctx.lineTo(X(a + 1), Y(b + 1)); } else { ctx.moveTo(X(a), Y(b + 1)); ctx.lineTo(X(a + 1), Y(b + 1)); } }
+  ctx.stroke();
+  ctx.lineWidth = frameW; ctx.beginPath();
+  for (const [x, y] of cells) {
+    if (!cellSet.has(key(x, y - 1))) { ctx.moveTo(X(x), Y(y)); ctx.lineTo(X(x + 1), Y(y)); }
+    if (!cellSet.has(key(x, y + 1))) { ctx.moveTo(X(x), Y(y + 1)); ctx.lineTo(X(x + 1), Y(y + 1)); }
+    if (!cellSet.has(key(x - 1, y))) { ctx.moveTo(X(x), Y(y)); ctx.lineTo(X(x), Y(y + 1)); }
+    if (!cellSet.has(key(x + 1, y))) { ctx.moveTo(X(x + 1), Y(y)); ctx.lineTo(X(x + 1), Y(y + 1)); }
+  }
+  ctx.stroke();
+  // region size, small in the top-left square (like killer-sudoku cage totals)
+  ctx.font = `600 ${Math.max(9, Math.round(CS * 0.24))}px Inter, system-ui, sans-serif`; ctx.textAlign = "left"; ctx.textBaseline = "top";
+  regions.forEach((reg, i) => {
+    if (regions.length === 1) return;
+    const [x, y] = reg[0];
+    ctx.fillStyle = ev.conflict.has(i) ? C.bad : ev.valid[i] ? C.ink : C.muted;
+    ctx.globalAlpha = ev.valid[i] ? 0.55 : 0.9;
+    ctx.fillText(reg.length, X(x) + CS * 0.12, Y(y) + CS * 0.1); ctx.globalAlpha = 1;
   });
-  window.addEventListener("resize", () => { resize(); update(); });
+  // selection outline + count
+  if (selection.length) {
+    ctx.strokeStyle = C.accent; ctx.lineWidth = 2; ctx.beginPath();
+    for (const k of selection) { const [x, y] = unkey(k);
+      if (!selSet.has(key(x, y - 1))) { ctx.moveTo(X(x), Y(y)); ctx.lineTo(X(x + 1), Y(y)); }
+      if (!selSet.has(key(x, y + 1))) { ctx.moveTo(X(x), Y(y + 1)); ctx.lineTo(X(x + 1), Y(y + 1)); }
+      if (!selSet.has(key(x - 1, y))) { ctx.moveTo(X(x), Y(y)); ctx.lineTo(X(x), Y(y + 1)); }
+      if (!selSet.has(key(x + 1, y))) { ctx.moveTo(X(x + 1), Y(y)); ctx.lineTo(X(x + 1), Y(y + 1)); } }
+    ctx.stroke();
+    const [lx, ly] = unkey(selection.at(-1));
+    ctx.fillStyle = C.accent; ctx.font = `700 ${Math.round(CS * 0.4)}px Inter, system-ui, sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(selection.length, X(lx) + CS / 2, Y(ly) + CS / 2 + 1);
+  }
+  // line-mode hover
+  if (mode === "lines" && hoverEdge && !stroke) {
+    const [x, y, t] = hoverEdge.split(","), a = +x, b = +y;
+    ctx.strokeStyle = C.accent; ctx.lineWidth = wallW + 1; ctx.globalAlpha = walls.has(hoverEdge) ? 0.9 : 0.55; ctx.beginPath();
+    if (t === "r") { ctx.moveTo(X(a + 1), Y(b)); ctx.lineTo(X(a + 1), Y(b + 1)); } else { ctx.moveTo(X(a), Y(b + 1)); ctx.lineTo(X(a + 1), Y(b + 1)); }
+    ctx.stroke(); ctx.globalAlpha = 1;
+  }
+  if (solveAnim && now - solveAnim < 260 + (W + H) * 35) requestAnimationFrame(draw); else solveAnim = 0;
+}
 
-  window.__game = { get s() { return { level, cells, rules, panes, CS, PAD }; }, newLevel, evaluate,
-    setPanes(p) { panes = p; rebuildOwner(); afterChange(); } };
-  newLevel(1);
+function shapeIcon(cells, s = 9) {
+  const n = normalize(cells), w = Math.max(...n.map((c) => c[0])) + 1, h = Math.max(...n.map((c) => c[1])) + 1;
+  const cv = document.createElement("canvas"), dpr = window.devicePixelRatio || 1;
+  cv.width = (w * s + 2) * dpr; cv.height = (h * s + 2) * dpr; cv.style.width = (w * s + 2) + "px"; cv.style.height = (h * s + 2) + "px";
+  const c = cv.getContext("2d"); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--ink").trim();
+  for (const [x, y] of n) { c.beginPath(); c.roundRect ? c.roundRect(1 + x * s + .5, 1 + y * s + .5, s - 1, s - 1, 1.5) : c.rect(1 + x * s, 1 + y * s, s - 1, s - 1); c.fill(); }
+  return cv;
+}
+const ruleEls = [];
+function buildRules() {
+  const box = $("#rules"); box.innerHTML = ""; ruleEls.length = 0;
+  for (const r of rules) {
+    const el = document.createElement("div"); el.className = "rule";
+    const st = document.createElement("span"); st.className = "st"; st.textContent = "✓";
+    const txt = document.createElement("span");
+    el.append(st, txt);
+    if (r.type === "shapes") { const sh = document.createElement("span"); sh.className = "shapes";
+      r.shapes.forEach((s) => sh.appendChild(shapeIcon(POLY.get(s)))); el.appendChild(sh); }
+    box.appendChild(el); ruleEls.push({ el, st, txt, r });
+  }
+}
+function paintRules() {
+  ruleEls.forEach((re, i) => { const s = evalState.status[i];
+    re.el.className = "rule " + (s.state === "open" ? "" : s.state);
+    re.st.textContent = s.state === "bad" ? "!" : "✓";
+    re.txt.textContent = ruleText(re.r) + s.extra; });
+}
+function paintStatus() {
+  $("#lvl").textContent = level;
+  $("#sq").textContent = `${evalState.validCells}/${cells.length}`;
+  $("#bar").style.width = (evalState.validCells / cells.length * 100) + "%";
+  $("#undo").disabled = !history.length;
+  $("#makePane").classList.toggle("show", selection.length > 0);
+  $("#makePane").textContent = selection.length ? `Make pane · ${selection.length}` : "Make pane";
+}
+let hintTimer = 0;
+function setHint(t, bad) { const h = $("#hint"); h.textContent = t; h.className = "hint" + (bad ? " bad" : ""); clearTimeout(hintTimer);
+  if (t) hintTimer = setTimeout(() => setHint(""), 3500); }
+function paintHowto() {
+  $("#howto").innerHTML = mode === "boxes"
+    ? "Drag across squares to make a pane, or tap squares one by one and press <b>Make pane</b>. Tap a coloured pane to undo it."
+    : "Drag along the grid lines to draw walls. Drag over a wall to erase it. Tap a line to toggle it.";
+}
+
+/* ================= INPUT: BOXES ================= */
+let selection = [], press = null;
+function cellAt(ev) {
+  const r = board.getBoundingClientRect();
+  const x = Math.floor((ev.clientX - r.left - PAD) / CS), y = Math.floor((ev.clientY - r.top - PAD) / CS);
+  return cellSet.has(key(x, y)) ? key(x, y) : null;
+}
+const adjacentTo = (k, list) => { const [x, y] = unkey(k); return list.some((o) => { const [a, b] = unkey(o); return Math.abs(a - x) + Math.abs(b - y) === 1; }); };
+const connected = (list) => { if (!list.length) return false; const set = new Set(list), seen = new Set([list[0]]), st = [list[0]];
+  while (st.length) { const [x, y] = unkey(st.pop()); for (const [dx, dy] of DIRS) { const n = key(x + dx, y + dy); if (set.has(n) && !seen.has(n)) { seen.add(n); st.push(n); } } }
+  return seen.size === set.size; };
+
+// Turn a set of squares into its own region: walls round the outside, none inside.
+function carve(list) {
+  const set = new Set(list);
+  pushHistory();
+  for (const k of list) { const [x, y] = unkey(k);
+    for (const [dx, dy] of DIRS) { const nk = key(x + dx, y + dy); if (!cellSet.has(nk)) continue;
+      const e = edgeBetween([x, y], [x + dx, y + dy]); if (set.has(nk)) walls.delete(e); else walls.add(e); } }
+  selection = []; changed();
+}
+// Dissolve a finished pane back into the unfinished space next to it (finished neighbours keep their walls).
+function dissolve(i) {
+  const reg = regions[i], set = new Set(reg.map((c) => key(...c)));
+  pushHistory();
+  for (const [x, y] of reg) for (const [dx, dy] of DIRS) {
+    const nk = key(x + dx, y + dy); if (!cellSet.has(nk)) continue;
+    const o = regionOf.get(nk), e = edgeBetween([x, y], [x + dx, y + dy]);
+    if (set.has(nk) || !evalState.valid[o]) walls.delete(e);
+  }
+  changed();
+}
+function makePane() {
+  if (!selection.length) return;
+  if (!connected(selection)) { setHint("Those squares need to touch each other to make one pane.", true); return; }
+  carve(selection);
+}
+
+/* ================= INPUT: LINES ================= */
+let stroke = null, hoverEdge = null;
+function gridPos(ev) { const r = board.getBoundingClientRect(); return [(ev.clientX - r.left - PAD) / CS, (ev.clientY - r.top - PAD) / CS]; }
+function nearestEdge(gx, gy) {
+  // the nearest inner grid line segment to a point, if it's close enough
+  const fx = gx - Math.floor(gx), fy = gy - Math.floor(gy), cx = Math.floor(gx), cy = Math.floor(gy);
+  const cand = [];
+  cand.push([Math.min(fx, 1 - fx), fx < .5 ? edgeR(cx - 1, cy) : edgeR(cx, cy)]);
+  cand.push([Math.min(fy, 1 - fy), fy < .5 ? edgeD(cx, cy - 1) : edgeD(cx, cy)]);
+  cand.sort((a, b) => a[0] - b[0]);
+  for (const [d, id] of cand) if (d < 0.28 && isInner(id)) return id;
+  return null;
+}
+function segmentEdge(v1, v2) {
+  // the wall between two neighbouring grid corners
+  const [x1, y1] = v1, [x2, y2] = v2;
+  if (x1 === x2) { const y = Math.min(y1, y2); const id = edgeR(x1 - 1, y); return isInner(id) ? id : null; }
+  const x = Math.min(x1, x2); const id = edgeD(x, y1 - 1); return isInner(id) ? id : null;
+}
+function strokeTo(v) {
+  // walk from the last corner to this one along the grid, one segment at a time
+  let [cx, cy] = stroke.v;
+  while (cx !== v[0] || cy !== v[1]) {
+    const nx = cx + Math.sign(v[0] - cx) * (Math.abs(v[0] - cx) >= Math.abs(v[1] - cy) ? 1 : 0);
+    const ny = cy + (nx === cx ? Math.sign(v[1] - cy) : 0);
+    const id = segmentEdge([cx, cy], [nx, ny]);
+    if (id) {
+      if (stroke.paint === null) stroke.paint = !walls.has(id);
+      if (!stroke.saved) { pushHistory(); stroke.saved = true; }
+      if (stroke.paint) walls.add(id); else walls.delete(id);
+      stroke.did = true;
+    }
+    cx = nx; cy = ny;
+  }
+  stroke.v = [cx, cy];
+}
+
+/* ================= POINTER ================= */
+board.addEventListener("pointerdown", (ev) => {
+  if (modalOpen()) return;
+  ev.preventDefault(); board.setPointerCapture(ev.pointerId);
+  if (mode === "lines") {
+    const [gx, gy] = gridPos(ev);
+    stroke = { v: [Math.round(gx), Math.round(gy)], paint: null, did: false, saved: false, sx: gx, sy: gy };
+    return;
+  }
+  const k = cellAt(ev); if (!k) return;
+  press = { start: k, drag: [k], moved: false, right: ev.button === 2 };
+  draw();
+});
+board.addEventListener("pointermove", (ev) => {
+  if (mode === "lines") {
+    const [gx, gy] = gridPos(ev);
+    if (stroke) {
+      const v = [Math.round(gx), Math.round(gy)];
+      if (Math.hypot(gx - v[0], gy - v[1]) < 0.38 && (v[0] !== stroke.v[0] || v[1] !== stroke.v[1])) { strokeTo(v); changed(); }
+    } else if (ev.pointerType === "mouse") { const e = nearestEdge(gx, gy); if (e !== hoverEdge) { hoverEdge = e; draw(); } }
+    return;
+  }
+  if (!press) return;
+  const k = cellAt(ev); if (!k || k === press.drag.at(-1)) return;
+  if (!press.drag.includes(k) && adjacentTo(k, press.drag)) { press.drag.push(k); press.moved = true; selection = press.drag.slice(); draw(); paintStatus(); }
+});
+board.addEventListener("pointerup", (ev) => {
+  if (mode === "lines") {
+    if (stroke && !stroke.did) {
+      const [gx, gy] = gridPos(ev), e = nearestEdge(gx, gy);
+      if (e) { pushHistory(); if (walls.has(e)) walls.delete(e); else walls.add(e); changed(); }
+    } else if (stroke) changed();
+    stroke = null; return;
+  }
+  if (!press) return;
+  const p = press; press = null;
+  if (p.moved) { carve(p.drag); return; }
+  // a tap
+  const i = regionOf.get(p.start);
+  if (selection.length === 0 && evalState.valid[i] && regions.length > 1) { dissolve(i); return; }
+  if (selection.includes(p.start)) selection = selection.filter((k) => k !== p.start);
+  else selection.push(p.start);
+  draw(); paintStatus();
+});
+board.addEventListener("pointercancel", () => { stroke = null; press = null; draw(); });
+board.addEventListener("pointerleave", () => { if (hoverEdge) { hoverEdge = null; draw(); } });
+board.addEventListener("contextmenu", (ev) => ev.preventDefault());
+
+function setMode(m) {
+  mode = m; store.set("gk-mode", m); selection = []; hoverEdge = null;
+  $("#modeBoxes").classList.toggle("on", m === "boxes"); $("#modeLines").classList.toggle("on", m === "lines");
+  board.className = m; paintHowto(); draw(); paintStatus();
+}
+$("#modeBoxes").onclick = () => setMode("boxes");
+$("#modeLines").onclick = () => setMode("lines");
+$("#makePane").onclick = makePane;
+function undo() { if (!history.length) return; walls = new Set(history.pop()); selection = []; changed(); }
+$("#undo").onclick = undo;
+$("#clear").onclick = () => { if (!walls.size && !selection.length) return; pushHistory(); walls = new Set(); selection = []; changed(); };
+$("#skip").onclick = () => newPuzzle(level);
+
+window.addEventListener("keydown", (ev) => {
+  if (ev.target.closest && ev.target.closest("input")) return;
+  if (modalOpen()) { if ((ev.code === "Space" || ev.code === "Enter") && $("#nextBtn")) { ev.preventDefault(); $("#nextBtn").click(); } return; }
+  const k = ev.key.toLowerCase();
+  if (k === "b") setMode("boxes"); else if (k === "l") setMode("lines");
+  else if (k === "z" && !ev.shiftKey) undo();
+  else if (ev.key === "Enter") makePane();
+  else if (ev.key === "Escape") { selection = []; draw(); paintStatus(); }
+});
+let rz = 0;
+window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (cells.length) { resize(); draw(); } }, 60); });
+
+/* ================= SOLVED ================= */
+const modalOpen = () => !!$("#modalSlot").firstChild;
+function onSolved() {
+  pauseTimer(); paintTimer();
+  const secs = currentElapsed(), result = { level, seconds: secs, panes: regions.length, squares: cells.length, rules: rules.map((r) => r.type).join("+"), mode };
+  solveAnim = performance.now(); draw();
+  const next = level + 1;
+  store.set("gk-state", null); store.set("gk-level", Math.max(next, store.get("gk-level") || 1));
+  setTimeout(() => {
+    $("#modalSlot").innerHTML = `<div class="scrim"><div class="card solved" role="dialog" aria-modal="true">
+      <p style="margin:0">Level ${level} solved</p><div class="big">${fmtTime(secs)}</div>
+      <p class="save-line" id="saveLine"></p>
+      <div class="btns"><button class="btn primary" id="nextBtn">Next level <kbd style="border-color:transparent;color:inherit;opacity:.6">Space</kbd></button></div></div></div>`;
+    $("#nextBtn").onclick = () => { $("#modalSlot").innerHTML = ""; newPuzzle(next); };
+    saveResult(result);
+  }, 600);
+}
+
+/* ================= ACCOUNTS (Google Sheet) ================= */
+const ACC = { name: store.get("gk-user"), level: 1, solved: 0, fastest: null, status: "" };
+const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _.\-]{1,23}$/;
+const STATUS = { saved: "All progress saved", saving: "Saving…", pending: "Saving…", error: "Couldn’t save. Trying again soon." };
+let saveTimer = 0, retryTimer = 0, dirty = false, pendingResult = null;
+
+// A text/plain POST is a "simple" request, so the browser skips the CORS preflight Apps Script can't answer.
+async function api(action, data, keepalive) {
+  let res;
+  try { res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(Object.assign({ action }, data)), keepalive: !!keepalive }); }
+  catch (e) { throw new Error("Couldn’t reach the score sheet. Check your connection and try again."); }
+  let j; try { j = await res.json(); } catch (e) { throw new Error("The score sheet sent back something unexpected."); }
+  if (!j || !j.ok) throw new Error((j && j.error) || "Something went wrong.");
+  return j;
+}
+function toast(html) { const t = document.createElement("div"); t.className = "toast"; t.innerHTML = html; document.body.appendChild(t); setTimeout(() => t.remove(), 2600); }
+function fmtDate(t) { const d = new Date(t); return isNaN(d) ? "" : d.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }); }
+
+function paintAcct() {
+  $("#acctWrap").hidden = !API_URL;
+  if (!API_URL) return;
+  $("#acctBtn").innerHTML = ACC.name
+    ? `<span class="avatar">${esc(ACC.name[0].toUpperCase())}</span><span>${esc(ACC.name)}</span><span class="dot ${ACC.status}"></span>`
+    : "Sign in";
+}
+function setStatus(st) { ACC.status = st; const d = $("#acctBtn .dot"); if (d) d.className = "dot " + st; const t = $("#acctStatus"); if (t) t.textContent = STATUS[st] || "Signed in"; }
+
+function openLogin() {
+  closePop();
+  $("#modalSlot").innerHTML = `<div class="scrim" id="loginScrim"><form class="card" id="loginForm" role="dialog" aria-modal="true" novalidate>
+    <h3>Save your progress</h3>
+    <p>Type a username. A new name makes an account; a name you’ve used before signs you back in.</p>
+    <label for="loginName">Username</label>
+    <input id="loginName" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="24" placeholder="e.g. jordan_k">
+    <p class="err" id="loginErr" role="alert"></p>
+    <p class="fine">No email or password. Anyone who types your username can use your account, so pick something only you would type.</p>
+    <div class="btns"><button type="submit" class="btn primary" id="loginGo">Continue</button><button type="button" class="linkbtn" id="loginSkip">Not now</button></div>
+  </form></div>`;
+  const form = $("#loginForm"), input = $("#loginName"), err = $("#loginErr"), go = $("#loginGo");
+  setTimeout(() => input.focus(), 60);
+  input.addEventListener("input", () => (err.textContent = ""));
+  const close = () => { $("#modalSlot").innerHTML = ""; };
+  $("#loginSkip").onclick = () => { store.set("gk-login-seen", 1); close(); };
+  $("#loginScrim").addEventListener("click", (e) => { if (e.target.id === "loginScrim") close(); });
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = input.value.trim().replace(/\s+/g, " ");
+    const fail = (m) => { err.textContent = m; form.classList.remove("shake"); void form.offsetWidth; form.classList.add("shake"); go.disabled = false; go.textContent = "Continue"; input.focus(); };
+    if (!NAME_RE.test(name)) return fail("Use 2–24 letters or numbers. Spaces, dots, dashes and underscores are fine after the first character.");
+    go.disabled = true; go.textContent = "Signing in…";
+    try {
+      const j = await api("login", { username: name });
+      store.set("gk-login-seen", 1); close(); signedIn(j, true);
+      toast(j.created ? `Account created. Welcome, ${esc(j.username)}!` : `Welcome back, ${esc(j.username)}`);
+      if (pendingResult) { const r = pendingResult; pendingResult = null; saveResult(r); }
+    } catch (ex) { fail(ex.message); }
+  });
+}
+function signedIn(j, fresh) {
+  ACC.name = j.username; ACC.level = j.level || 1; ACC.solved = j.solved || 0; ACC.fastest = j.fastest;
+  store.set("gk-user", ACC.name); setStatus("saved"); paintAcct();
+  // pick up the account's puzzle if it's further along than this browser
+  const remote = j.progress && j.progress.state;
+  if (remote && remote.v === 1 && remote.level >= level && (remote.level > level || !history.length) && Array.isArray(remote.cells)) {
+    loadPuzzle(remote, remote.walls, remote.elapsed); store.set("gk-state", remote);
+    if (fresh) toast(`Picked up level ${remote.level} where you left off`);
+  } else if (!remote && ACC.level > level && !history.length) {
+    newPuzzle(ACC.level);
+  } else markDirty();
+}
+function signOut() {
+  if (dirty) saveProgress();
+  ACC.name = null; ACC.status = ""; store.del("gk-user"); closePop(); paintAcct(); toast("Signed out");
+}
+function closePop() { const p = $("#acctPop"); if (p && !p.hidden) { p.hidden = true; $("#acctBtn").setAttribute("aria-expanded", "false"); } }
+async function openPop() {
+  const pop = $("#acctPop");
+  pop.innerHTML = `<h4>${esc(ACC.name)}</h4><p class="sub" id="acctStatus">${STATUS[ACC.status] || "Signed in"}</p>
+    <div class="stats3"><div><span>Level</span><b>${ACC.level}</b></div><div><span>Solved</span><b>${ACC.solved}</b></div><div><span>Fastest</span><b>${ACC.fastest == null ? "–" : fmtTime(ACC.fastest)}</b></div></div>
+    <p class="mini">Leaderboard</p><ul class="list" id="lb"><li><small>Loading…</small></li></ul>
+    <p class="mini">Recent solves</p><ul class="list" id="hist"><li><small>Loading…</small></li></ul>
+    <button class="linkbtn" id="signOutBtn">Sign out</button>`;
+  pop.hidden = false; $("#acctBtn").setAttribute("aria-expanded", "true");
+  $("#signOutBtn").onclick = signOut;
+  try {
+    const j = await api("history", { username: ACC.name });
+    const h = $("#hist"), lb = $("#lb"); if (!h) return;
+    h.innerHTML = j.results.length ? j.results.map((r) => `<li><span>Level ${Number(r.level)}<br><small>${fmtDate(r.time)} · ${Number(r.panes)} panes</small></span><span>${fmtTime(Number(r.seconds))}</span></li>`).join("")
+      : "<li><small>No solved puzzles yet.</small></li>";
+    lb.innerHTML = j.leaderboard.length ? j.leaderboard.map((u, i) => `<li class="${u.username.toLowerCase() === ACC.name.toLowerCase() ? "me" : ""}"><span>${i + 1}. ${esc(u.username)}</span><span>Level ${Number(u.level)} <small>· ${Number(u.solved)} solved</small></span></li>`).join("")
+      : "<li><small>Nobody yet. Be first!</small></li>";
+  } catch (e) { const h = $("#hist"); if (h) h.innerHTML = `<li><small>${esc(e.message)}</small></li>`; const lb = $("#lb"); if (lb) lb.innerHTML = ""; }
+}
+$("#acctBtn").addEventListener("click", (e) => { e.stopPropagation(); if (!ACC.name) return openLogin(); if ($("#acctPop").hidden) openPop(); else closePop(); });
+document.addEventListener("click", (e) => { if (!e.target.closest("#acctWrap")) closePop(); });
+
+function markDirty() {
+  if (!API_URL || !ACC.name) return;
+  dirty = true; clearTimeout(saveTimer); saveTimer = setTimeout(saveProgress, 2000); setStatus("pending");
+}
+async function saveProgress(keepalive) {
+  clearTimeout(saveTimer);
+  if (!API_URL || !ACC.name || !dirty) return;
+  dirty = false;
+  const name = ACC.name, st = solvedFlag ? null : snapshotState();
+  setStatus("saving");
+  try { await api("progress", { username: name, state: st }, keepalive === true); if (!dirty && ACC.name === name) setStatus("saved"); }
+  catch (e) { if (ACC.name !== name) return; dirty = true; setStatus("error"); clearTimeout(retryTimer); retryTimer = setTimeout(saveProgress, 15000); }
+}
+addEventListener("pagehide", () => { pauseTimer(); store.set("gk-state", solvedFlag ? null : snapshotState()); if (dirty) saveProgress(true); });
+
+async function saveResult(r) {
+  const line = $("#saveLine");
+  const show = (cls, html) => { if (line && line.isConnected) { line.className = "save-line " + cls; line.innerHTML = html; } };
+  if (!API_URL) return;
+  if (!ACC.name) {
+    show("", `<button class="linkbtn" id="signToSave">Sign in to save this solve</button>`);
+    const b = $("#signToSave"); if (b) b.onclick = () => { pendingResult = r; openLogin(); };
+    return;
+  }
+  clearTimeout(saveTimer); dirty = false;
+  show("", "Saving…");
+  try {
+    const j = await api("result", { username: ACC.name, result: r });
+    ACC.level = j.level; ACC.solved = j.solved; ACC.fastest = j.fastest; setStatus("saved");
+    show("good", j.newFastest && j.solved > 1 ? "New fastest solve! Saved to your account." : "Saved to your account.");
+    api("progress", { username: ACC.name, state: null }).catch(() => {});
+  } catch (e) {
+    show("bad", `${esc(e.message)} <button class="linkbtn" id="retrySave">Retry</button>`);
+    const b = $("#retrySave"); if (b) b.onclick = () => saveResult(r);
+  }
+}
+async function initAccounts() {
+  paintAcct();
+  if (!API_URL) return;
+  if (ACC.name) { try { signedIn(await api("login", { username: ACC.name }), false); } catch (e) { setStatus("error"); } }
+  else if (!store.get("gk-login-seen")) setTimeout(openLogin, 700);
+}
+
+/* ================= START ================= */
+(function start() {
+  const st = store.get("gk-state");
+  if (st && st.v === 1 && Array.isArray(st.cells) && st.cells.length) loadPuzzle(st, st.walls, st.elapsed);
+  else newPuzzle(store.get("gk-level") || 1);
+  setMode(mode);
+  initAccounts();
+})();
+
+// hooks for automated tests
+window.__game = { get s() { return { level, cells, rules, walls, regions, solution, evalState, CS, PAD, selection }; },
+  newPuzzle, setWalls(list) { walls = new Set(list); changed(); }, carve, edgeBetween };
 })();
 </script>
 </body>

@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Glasskat</title>
+<style>
+  :root {
+    --bg: #14161f; --panel: #1f2330; --ink: #e9ecf5; --muted: #8b93ab;
+    --lead: #2b2f3a; --empty: #2a3042; --empty-line: #3a4157;
+    --ok: rgba(120, 230, 160, .55); --bad: rgba(255, 90, 90, .55); --accent: #7fd3ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { display: flex; flex-direction: column; align-items: center; padding: 12px 16px; gap: 10px;
+    user-select: none; -webkit-user-select: none; touch-action: none; overflow: hidden; }
+  header { display: flex; align-items: baseline; gap: 14px; width: 100%; max-width: 640px; justify-content: space-between; }
+  h1 { margin: 0; font-size: 22px; letter-spacing: .04em; }
+  .stats { color: var(--muted); font-variant-numeric: tabular-nums; }
+  #queue { display: flex; gap: 10px; align-items: center; justify-content: center; min-height: 92px; }
+  .slot { background: var(--panel); border-radius: 10px; padding: 6px; display: grid; place-items: center; }
+  .slot.current { outline: 2px solid var(--accent); cursor: pointer; }
+  .slot canvas { display: block; }
+  #board { display: block; max-width: 100%; touch-action: none; cursor: crosshair; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  button { background: var(--panel); color: var(--ink); border: 1px solid #343a4d; border-radius: 8px;
+    padding: 8px 12px; font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  .help { color: var(--muted); font-size: 13px; text-align: center; max-width: 640px; }
+  kbd { background: #2a2f3e; border-radius: 4px; padding: 0 5px; font-size: 12px; }
+  #overlay { position: fixed; inset: 0; display: none; place-items: center; background: rgba(10,12,18,.72); }
+  #overlay.show { display: grid; }
+  #overlay .card { background: var(--panel); padding: 22px 28px; border-radius: 14px; text-align: center; max-width: 320px; }
+  #overlay h2 { margin: 0 0 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Glasskat</h1>
+  <div class="stats">Level <span id="lvl">1</span> · <span id="left">0</span> panes left</div>
+</header>
+
+<div id="queue"></div>
+<canvas id="board"></canvas>
+
+<div class="controls">
+  <button id="rot">Rotate (R)</button>
+  <button id="flip">Flip (F)</button>
+  <button id="undo">Undo (Z)</button>
+  <button id="restart">Restart level</button>
+</div>
+<div class="help">
+  Fit every glass pane into the window frame. Panes arrive in order — click/tap a cell to place the highlighted one.
+  <kbd>R</kbd> / right-click / scroll rotates, <kbd>F</kbd> flips, <kbd>Z</kbd> undoes. Every level is guaranteed solvable.
+</div>
+
+<div id="overlay"><div class="card">
+  <h2 id="ovTitle">Window complete!</h2>
+  <p id="ovText"></p>
+  <button id="cont">Continue (Space)</button>
+</div></div>
+
+<script>
+(() => {
+  // ---------- RNG ----------
+  let seed = (Date.now() ^ 0x9e3779b9) >>> 0;
+  const rand = () => { seed = (seed + 0x6D2B79F5) >>> 0; let t = seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const ri = (a, b) => a + Math.floor(rand() * (b - a + 1));
+  const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = ri(0, i); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
+  const DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
+  const key = (x, y) => x + "," + y;
+
+  // ---------- Shape helpers ----------
+  function normalize(cells) {
+    const mx = Math.min(...cells.map(c => c[0])), my = Math.min(...cells.map(c => c[1]));
+    return cells.map(([x, y]) => [x - mx, y - my]).sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+  }
+  const rotate = cells => normalize(cells.map(([x, y]) => [-y, x]));
+  const flip = cells => normalize(cells.map(([x, y]) => [-x, y]));
+
+  // ---------- Board generation ----------
+  function makeBoard(level) {
+    const W = Math.min(6 + level, 12), H = Math.min(6 + level, 12);
+    const cells = new Set();
+    for (let y = 1; y <= H; y++) for (let x = 1; x <= W; x++) cells.add(key(x, y));
+    // carve notches and add bumps along the edges for an irregular frame
+    const edits = 2 + level;
+    for (let i = 0; i < edits; i++) {
+      const side = ri(0, 3), len = ri(1, 3), depth = ri(1, 2), add = rand() < 0.5;
+      const along = side < 2 ? W : H, start = ri(1, Math.max(1, along - len + 1));
+      for (let a = start; a < start + len; a++) for (let d = 0; d < depth; d++) {
+        let x, y;
+        if (side === 0) { x = a; y = add ? 0 - d : 1 + d; }
+        else if (side === 1) { x = a; y = add ? H + 1 + d : H - d; }
+        else if (side === 2) { y = a; x = add ? 0 - d : 1 + d; }
+        else { y = a; x = add ? W + 1 + d : W - d; }
+        if (add) cells.add(key(x, y)); else cells.delete(key(x, y));
+      }
+    }
+    // keep only the largest connected region
+    const list = [...cells].map(k => k.split(",").map(Number));
+    const seen = new Set(); let best = [];
+    for (const [sx, sy] of list) {
+      if (seen.has(key(sx, sy))) continue;
+      const comp = [], st = [[sx, sy]]; seen.add(key(sx, sy));
+      while (st.length) { const [x, y] = st.pop(); comp.push([x, y]);
+        for (const [dx, dy] of DIRS) { const k = key(x + dx, y + dy);
+          if (cells.has(k) && !seen.has(k)) { seen.add(k); st.push([x + dx, y + dy]); } } }
+      if (comp.length > best.length) best = comp;
+    }
+    return normalize(best);
+  }
+
+  // Partition the board into polyominoes (sizes ~3–6) so a solution always exists.
+  function partition(cells, level) {
+    const owner = new Map(), all = new Set(cells.map(([x, y]) => key(x, y)));
+    const free = k => all.has(k) && !owner.has(k);
+    const freeNeighbors = (x, y) => DIRS.filter(([dx, dy]) => free(key(x + dx, y + dy))).length;
+    const pieces = [];
+    const maxSize = level < 3 ? 5 : 6;
+    while (true) {
+      const remaining = cells.filter(([x, y]) => free(key(x, y)));
+      if (!remaining.length) break;
+      // start from the most constrained free cell to avoid stranded singles
+      remaining.sort((a, b) => freeNeighbors(...a) - freeNeighbors(...b) || rand() - 0.5);
+      const start = remaining[0];
+      const target = ri(3, maxSize), id = pieces.length, piece = [start];
+      owner.set(key(...start), id);
+      while (piece.length < target) {
+        const frontier = [];
+        for (const [x, y] of piece) for (const [dx, dy] of DIRS)
+          if (free(key(x + dx, y + dy))) frontier.push([x + dx, y + dy]);
+        if (!frontier.length) break;
+        frontier.sort((a, b) => freeNeighbors(...a) - freeNeighbors(...b) || rand() - 0.5);
+        const pick = rand() < 0.6 ? frontier[0] : frontier[ri(0, frontier.length - 1)];
+        owner.set(key(...pick), id); piece.push(pick);
+      }
+      pieces.push(piece);
+    }
+    // merge tiny pieces (size < 3) into a neighboring piece
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (let i = 0; i < pieces.length; i++) {
+        const p = pieces[i]; if (!p || p.length >= 3) continue;
+        const nbIds = new Set();
+        for (const [x, y] of p) for (const [dx, dy] of DIRS) {
+          const o = owner.get(key(x + dx, y + dy)); if (o !== undefined && o !== i && pieces[o]) nbIds.add(o);
+        }
+        if (!nbIds.size) continue;
+        const target = [...nbIds].sort((a, b) => pieces[a].length - pieces[b].length)[0];
+        for (const c of p) { owner.set(key(...c), target); pieces[target].push(c); }
+        pieces[i] = null; changed = true;
+      }
+    }
+    return pieces.filter(Boolean);
+  }
+
+  // ---------- Glass colors ----------
+  const PALETTE = ["#5ec8f2","#f26d6d","#f2c14e","#7ee08a","#b48cf2","#f29bd0","#5ef2c8","#f2985e","#8fa8ff","#d6f25e"];
+
+  // ---------- State ----------
+  let level = 1, boardCells, boardSet, W, H, queue, placed, grid, hover = null, cur = null;
+
+  function newLevel(l) {
+    level = l;
+    boardCells = makeBoard(level);
+    boardSet = new Set(boardCells.map(c => key(...c)));
+    W = Math.max(...boardCells.map(c => c[0])) + 1; H = Math.max(...boardCells.map(c => c[1])) + 1;
+    const parts = partition(boardCells, level);
+    queue = shuffle(parts.map((p, i) => {
+      let s = normalize(p); const r = ri(0, 3); for (let k = 0; k < r; k++) s = rotate(s);
+      if (rand() < 0.5) s = flip(s);
+      return { cells: s, color: PALETTE[i % PALETTE.length], sol: p };
+    }));
+    placed = []; grid = new Map(); cur = queue.length ? { ...queue[0] } : null;
+    hideOverlay(); resize(); render();
+  }
+
+  function restartLevel() {
+    // put placed panes back at the front of the queue in their original order
+    while (placed.length) undo(true);
+    render();
+  }
+
+  // ---------- Placement ----------
+  function anchorOf(cells) {
+    // the cell closest to the shape's centroid sits under the pointer
+    const cx = cells.reduce((s, c) => s + c[0], 0) / cells.length, cy = cells.reduce((s, c) => s + c[1], 0) / cells.length;
+    return cells.reduce((b, c) => (Math.hypot(c[0] - cx, c[1] - cy) < Math.hypot(b[0] - cx, b[1] - cy) ? c : b));
+  }
+  function footprint(piece, gx, gy) {
+    const [ax, ay] = anchorOf(piece.cells);
+    return piece.cells.map(([x, y]) => [x - ax + gx, y - ay + gy]);
+  }
+  const fits = fp => fp.every(([x, y]) => boardSet.has(key(x, y)) && !grid.has(key(x, y)));
+
+  function place(gx, gy) {
+    if (!cur) return;
+    const fp = footprint(cur, gx, gy);
+    if (!fits(fp)) { flash(); return; }
+    const entry = { piece: queue.shift(), shown: cur, fp };
+    for (const [x, y] of fp) grid.set(key(x, y), entry.piece.color);
+    placed.push(entry);
+    cur = queue.length ? { ...queue[0] } : null;
+    render();
+    if (grid.size === boardCells.length) setTimeout(win, 250);
+    else if (cur && !anyFit(cur)) setTimeout(() => showOverlay("Stuck!", "That pane can't fit anywhere now. Undo a few moves or restart the level.", "Undo (Space)", () => { hideOverlay(); undo(); }), 250);
+  }
+  function undo(silent) {
+    const e = placed.pop(); if (!e) return;
+    for (const [x, y] of e.fp) grid.delete(key(x, y));
+    queue.unshift(e.piece); cur = { ...e.shown };
+    if (!silent) render();
+  }
+  function anyFit(piece) {
+    let s = piece.cells;
+    for (let f = 0; f < 2; f++) { for (let r = 0; r < 4; r++) {
+      const p = { cells: s };
+      for (const [x, y] of boardCells) if (!grid.has(key(x, y)) && fits(footprint(p, x, y))) return true;
+      s = rotate(s); } s = flip(s); }
+    return false;
+  }
+
+  // ---------- Rendering ----------
+  const board = document.getElementById("board"), ctx = board.getContext("2d");
+  let CS = 40, PAD = 14, flashT = 0;
+
+  function resize() {
+    const maxW = Math.min(window.innerWidth - 32, 640), maxH = window.innerHeight - 290;
+    CS = Math.max(18, Math.floor(Math.min((maxW - PAD * 2) / W, (maxH - PAD * 2) / H)));
+    const dpr = window.devicePixelRatio || 1;
+    const pw = W * CS + PAD * 2, ph = H * CS + PAD * 2;
+    board.width = pw * dpr; board.height = ph * dpr; board.style.width = pw + "px"; board.style.height = ph + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function glassCell(c, x, y, s, color, alpha = 1) {
+    c.save(); c.globalAlpha = alpha;
+    const g = c.createLinearGradient(x, y, x + s, y + s);
+    g.addColorStop(0, shade(color, 40)); g.addColorStop(.55, color); g.addColorStop(1, shade(color, -35));
+    c.fillStyle = g; c.fillRect(x, y, s, s);
+    c.fillStyle = "rgba(255,255,255,.28)";
+    c.beginPath(); c.moveTo(x + s * .12, y + s * .12); c.lineTo(x + s * .55, y + s * .12); c.lineTo(x + s * .12, y + s * .55); c.fill();
+    c.restore();
+  }
+  function shade(hex, amt) {
+    const n = parseInt(hex.slice(1), 16);
+    const f = v => Math.max(0, Math.min(255, v + amt));
+    return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`;
+  }
+  // draw thick "lead" lines on edges where neighboring cells don't belong to the same group
+  function outline(c, cellsSet, ox, oy, s, width, color) {
+    c.strokeStyle = color; c.lineWidth = width; c.lineCap = "round"; c.beginPath();
+    for (const k of cellsSet) { const [x, y] = k.split(",").map(Number), px = ox + x * s, py = oy + y * s;
+      if (!cellsSet.has(key(x, y - 1))) { c.moveTo(px, py); c.lineTo(px + s, py); }
+      if (!cellsSet.has(key(x, y + 1))) { c.moveTo(px, py + s); c.lineTo(px + s, py + s); }
+      if (!cellsSet.has(key(x - 1, y))) { c.moveTo(px, py); c.lineTo(px, py + s); }
+      if (!cellsSet.has(key(x + 1, y))) { c.moveTo(px + s, py); c.lineTo(px + s, py + s); } }
+    c.stroke();
+  }
+
+  function render() {
+    const pw = W * CS + PAD * 2, ph = H * CS + PAD * 2;
+    ctx.clearRect(0, 0, pw, ph);
+    // empty window cells
+    for (const [x, y] of boardCells) {
+      ctx.fillStyle = "#2a3042"; ctx.fillRect(PAD + x * CS, PAD + y * CS, CS, CS);
+      ctx.strokeStyle = "#3a4157"; ctx.lineWidth = 1; ctx.strokeRect(PAD + x * CS + .5, PAD + y * CS + .5, CS - 1, CS - 1);
+    }
+    // placed panes
+    for (const e of placed) {
+      for (const [x, y] of e.fp) glassCell(ctx, PAD + x * CS, PAD + y * CS, CS, e.piece.color);
+      outline(ctx, new Set(e.fp.map(c => key(...c))), PAD, PAD, CS, Math.max(2, CS * .09), "#11131a");
+    }
+    // ghost
+    if (hover && cur) {
+      const fp = footprint(cur, hover[0], hover[1]), ok = fits(fp);
+      for (const [x, y] of fp) {
+        if (ok) glassCell(ctx, PAD + x * CS, PAD + y * CS, CS, cur.color, .6);
+        else { ctx.fillStyle = "rgba(255,90,90,.45)"; ctx.fillRect(PAD + x * CS, PAD + y * CS, CS, CS); }
+      }
+      outline(ctx, new Set(fp.map(c => key(...c))), PAD, PAD, CS, 2, ok ? "#e9ecf5" : "#ff6b6b");
+    }
+    // window frame
+    outline(ctx, boardSet, PAD, PAD, CS, Math.max(4, CS * .16), flashT > performance.now() ? "#ff6b6b" : "#9aa3bd");
+    renderQueue();
+    document.getElementById("lvl").textContent = level;
+    document.getElementById("left").textContent = queue.length;
+    document.getElementById("undo").disabled = !placed.length;
+  }
+
+  function pieceCanvas(piece, cs) {
+    const w = Math.max(...piece.cells.map(c => c[0])) + 1, h = Math.max(...piece.cells.map(c => c[1])) + 1;
+    const cv = document.createElement("canvas"), dpr = window.devicePixelRatio || 1;
+    const box = 4 * cs + 8; cv.width = box * dpr; cv.height = box * dpr;
+    cv.style.width = box + "px"; cv.style.height = box + "px";
+    const c = cv.getContext("2d"); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const scale = Math.min(cs, (box - 8) / Math.max(w, h));
+    const ox = (box - w * scale) / 2, oy = (box - h * scale) / 2;
+    for (const [x, y] of piece.cells) glassCell(c, ox + x * scale, oy + y * scale, scale, piece.color);
+    outline(c, new Set(piece.cells.map(k => key(...k))), ox, oy, scale, 2, "#11131a");
+    return cv;
+  }
+
+  function renderQueue() {
+    const q = document.getElementById("queue"); q.innerHTML = "";
+    if (!cur) return;
+    const items = [cur, ...queue.slice(1, 3)];
+    items.forEach((p, i) => {
+      const slot = document.createElement("div"); slot.className = "slot" + (i === 0 ? " current" : "");
+      slot.appendChild(pieceCanvas(p, i === 0 ? 18 : 11));
+      if (i === 0) { slot.title = "Click to rotate"; slot.onclick = doRotate; }
+      else slot.style.opacity = .6;
+      q.appendChild(slot);
+    });
+  }
+
+  function flash() { flashT = performance.now() + 220; render(); setTimeout(render, 240); }
+
+  // ---------- Overlay ----------
+  const overlay = document.getElementById("overlay");
+  let overlayAction = null;
+  function showOverlay(title, text, btn, action) {
+    document.getElementById("ovTitle").textContent = title;
+    document.getElementById("ovText").textContent = text;
+    document.getElementById("cont").textContent = btn;
+    overlayAction = action; overlay.classList.add("show");
+  }
+  function hideOverlay() { overlay.classList.remove("show"); overlayAction = null; }
+  function win() {
+    showOverlay("Window complete!", `Level ${level} glazed with ${placed.length} panes.`, "Continue (Space)", () => newLevel(level + 1));
+  }
+  document.getElementById("cont").onclick = () => overlayAction && overlayAction();
+
+  // ---------- Input ----------
+  function cellAt(ev) {
+    const r = board.getBoundingClientRect();
+    return [Math.floor((ev.clientX - r.left - PAD) / CS), Math.floor((ev.clientY - r.top - PAD) / CS)];
+  }
+  board.addEventListener("pointermove", ev => { hover = cellAt(ev); render(); });
+  board.addEventListener("pointerdown", ev => { if (ev.button === 0) { hover = cellAt(ev); render(); } });
+  board.addEventListener("pointerup", ev => {
+    if (ev.button !== 0) return;
+    const c = cellAt(ev); place(c[0], c[1]);
+    if (ev.pointerType !== "mouse") hover = null;
+    render();
+  });
+  board.addEventListener("pointerleave", () => { hover = null; render(); });
+  board.addEventListener("contextmenu", ev => { ev.preventDefault(); doRotate(); });
+  board.addEventListener("wheel", ev => { ev.preventDefault(); doRotate(ev.deltaY < 0 ? 3 : 1); }, { passive: false });
+
+  function doRotate(times = 1) { if (!cur || overlayAction) return; for (let i = 0; i < times; i++) cur.cells = rotate(cur.cells); render(); }
+  function doFlip() { if (!cur || overlayAction) return; cur.cells = flip(cur.cells); render(); }
+  document.getElementById("rot").onclick = () => doRotate();
+  document.getElementById("flip").onclick = doFlip;
+  document.getElementById("undo").onclick = () => undo();
+  document.getElementById("restart").onclick = restartLevel;
+
+  window.addEventListener("keydown", ev => {
+    if (ev.code === "Space" || ev.code === "Enter") { ev.preventDefault(); if (overlayAction) overlayAction(); return; }
+    if (overlayAction) return;
+    const k = ev.key.toLowerCase();
+    if (k === "r") doRotate(ev.shiftKey ? 3 : 1);
+    else if (k === "f") doFlip();
+    else if (k === "z" || ev.key === "Backspace") undo();
+  });
+  window.addEventListener("resize", () => { resize(); render(); });
+
+  // expose for automated testing
+  window.__game = { get state() { return { level, queue, placed, grid, boardCells, cur }; }, place, newLevel, footprint, fits, anchorOf };
+
+  newLevel(1);
+})();
+</script>
+</body>
+</html>

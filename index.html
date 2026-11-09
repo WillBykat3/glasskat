@@ -134,6 +134,25 @@
   @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
   @keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
   @media (max-width: 420px) { .seg button span.lbl-long { display: none; } .level { font-size: 23px; } .btn { padding: 0 11px; } }
+  /* level title + picker */
+  .level-btn { background: none; border: 0; padding: 0; font-family: inherit; color: inherit; cursor: pointer; text-align: left; display: flex; align-items: baseline; gap: 8px; }
+  .level-btn:hover .chev { color: var(--ink); }
+  .chev { color: var(--muted); font-size: 16px; font-weight: 500; letter-spacing: 0; }
+  .chapter { font-size: 13px; color: var(--muted); font-weight: 500; margin-top: -10px; }
+  .levels-card { max-width: 440px; max-height: min(86vh, 760px); overflow: auto; }
+  .levels-card .chap { display: flex; justify-content: space-between; align-items: baseline; margin: 16px 0 8px; }
+  .levels-card .chap:first-of-type { margin-top: 6px; }
+  .levels-card .chap b { font-size: 14px; } .levels-card .chap small { color: var(--muted); font-size: 12.5px; }
+  .lv-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .lv { height: 46px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit;
+    font-size: 15px; font-weight: 600; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
+  .lv small { font-size: 10.5px; font-weight: 500; color: var(--muted); }
+  .lv.solved { background: var(--bg); }
+  .lv.solved small { color: var(--ok); }
+  .lv.current { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+  .lv:disabled { color: var(--line-2); cursor: default; background: transparent; }
+  .lv:not(:disabled):hover { border-color: var(--line-2); }
+  .overall { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin: -2px 0 0; }
 </style>
 </head>
 <body>
@@ -148,6 +167,9 @@
       <rect x="7" y="17" width="50" height="41" rx="10" stroke="currentColor" stroke-width="3.2"/>
     </svg><div>glass<span>kat</span></div></div>
     <div class="top-right">
+      <button class="chip icon-btn" id="levelsBtn" title="All levels" aria-label="All levels">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>
+      </button>
       <button class="chip icon-btn" id="themeBtn" title="Switch light / dark" aria-label="Switch light or dark theme">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg>
       </button>
@@ -157,9 +179,10 @@
   </div>
 
   <div class="status">
-    <div class="level">Level <span id="lvl">1</span><small id="sq"></small></div>
+    <button class="level level-btn" id="levelTitle" title="All levels">Level <span id="lvl">1</span><small id="sq"></small><span class="chev">▾</span></button>
     <div class="timer" id="timer">0:00</div>
   </div>
+  <div class="chapter" id="chapter"></div>
   <div class="progress"><i id="bar"></i></div>
 
   <div class="rules" id="rules"></div>
@@ -174,16 +197,17 @@
     </div>
     <div class="actions">
       <button class="btn primary" id="makePane">Make pane</button>
-      <button class="btn" id="hint" title="Fill in one pane of an answer (H)">Hint</button>
+      <button class="btn" id="hintBtn" title="Fill in one pane of the answer (H)">Hint</button>
       <button class="btn" id="undo" title="Undo (Z)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>Undo</button>
-      <button class="btn" id="clear" title="Clear the board">Clear</button>
-      <button class="btn" id="skip" title="Skip to a new board at this level">New</button>
+      <button class="btn" id="clear" title="Clear your lines">Clear</button>
     </div>
   </div>
   <div class="hint" id="howto"></div>
 </div>
 <div id="modalSlot"></div>
 
+<script src="core.js"></script>
+<script src="levels.js"></script>
 <script>
 (() => {
 "use strict";
@@ -191,6 +215,8 @@
    Leave it empty and accounts stay hidden; the game still saves in this browser. */
 const API_URL = "https://script.google.com/macros/s/AKfycbyBGny-UBelu_OCVo3IiJ4Qy5IsftYmlPs9RWgXsGkbvpzeOxylnPXXY4w0EM4d2-L4/exec";
 
+const GK = window.GK, LEVELS = window.GK_LEVELS, TOTAL = LEVELS.length;
+const { DIRS, key, unkey, normalize, canon, POLY, edgeR, edgeD, edgeBetween } = GK;
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const store = {
@@ -198,185 +224,38 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
   del(k) { try { localStorage.removeItem(k); } catch (e) {} },
 };
+const pick = (a) => a[Math.floor(Math.random() * a.length)];
 
 /* ================= THEME ================= */
 (function theme() {
   const saved = store.get("gk-theme");
   if (saved) document.documentElement.dataset.theme = saved;
   $("#themeBtn").addEventListener("click", () => {
-    const dark = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() === "#111113";
-    const next = dark ? "light" : "dark";
-    document.documentElement.dataset.theme = next; store.set("gk-theme", next); readColors(); draw();
+    const next = C.dark ? "light" : "dark";
+    document.documentElement.dataset.theme = next; store.set("gk-theme", next); readColors(); buildRules(); paintRules(); draw();
   });
 })();
 
-/* ================= RNG + POLYOMINOES ================= */
-let seed = (Date.now() ^ 0x9e3779b9) >>> 0;
-const rand = () => { seed = (seed + 0x6D2B79F5) >>> 0; let t = seed;
-  t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-  return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-const ri = (a, b) => a + Math.floor(rand() * (b - a + 1));
-const pick = (a) => a[ri(0, a.length - 1)];
-const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = ri(0, i); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-const key = (x, y) => x + "," + y;
-const unkey = (k) => k.split(",").map(Number);
-
-function normalize(cells) {
-  const mx = Math.min(...cells.map((c) => c[0])), my = Math.min(...cells.map((c) => c[1]));
-  return cells.map(([x, y]) => [x - mx, y - my]).sort((a, b) => a[1] - b[1] || a[0] - b[0]);
-}
-const rotate = (c) => normalize(c.map(([x, y]) => [-y, x]));
-const flip = (c) => normalize(c.map(([x, y]) => [-x, y]));
-const sig = (c) => normalize(c).map((p) => p.join(".")).join("|");
-function orientations(cells) {
-  const out = new Map(); let s = normalize(cells);
-  for (let f = 0; f < 2; f++) { for (let r = 0; r < 4; r++) { out.set(sig(s), s); s = rotate(s); } s = flip(s); }
-  return [...out.values()];
-}
-const canon = (c) => orientations(c).map(sig).sort()[0];
-const isRect = (c) => { const n = normalize(c); return (Math.max(...n.map((p) => p[0])) + 1) * (Math.max(...n.map((p) => p[1])) + 1) === c.length; };
-
-const POLY = new Map(); // every free polyomino up to 6 squares: canon -> cells
-(function enumerate() {
-  let layer = new Map([[canon([[0, 0]]), [[0, 0]]]]);
-  for (const [k, v] of layer) POLY.set(k, v);
-  for (let n = 2; n <= 6; n++) {
-    const next = new Map();
-    for (const cells of layer.values()) {
-      const set = new Set(cells.map((c) => key(...c)));
-      for (const [x, y] of cells) for (const [dx, dy] of DIRS) {
-        if (set.has(key(x + dx, y + dy))) continue;
-        const nc = normalize([...cells, [x + dx, y + dy]]), k = canon(nc);
-        if (!next.has(k)) next.set(k, nc);
-      }
-    }
-    for (const [k, v] of next) POLY.set(k, v);
-    layer = next;
-  }
-})();
-const S = (str) => canon(str.split(" ").map((p) => p.split(",").map(Number)));
-const SHAPES = {
-  I3: S("0,0 1,0 2,0"), L3: S("0,0 0,1 1,1"),
-  I4: S("0,0 1,0 2,0 3,0"), O4: S("0,0 1,0 0,1 1,1"), T4: S("0,0 1,0 2,0 1,1"), S4: S("1,0 2,0 0,1 1,1"), L4: S("0,0 0,1 0,2 1,2"),
-  P5: S("0,0 1,0 0,1 1,1 0,2"), plus: S("1,0 0,1 1,1 2,1 1,2"), U5: S("0,0 2,0 0,1 1,1 2,1"),
-};
-
-/* ================= RULES ================= */
-const PER_PANE = new Set(["shapes", "size", "sizes", "rect"]);
-function ruleText(r) {
-  switch (r.type) {
-    case "shapes": return r.shapes.length === 1 ? "Every pane is this shape" : "Every pane is one of these shapes";
-    case "size": return `Every pane has ${r.n} squares`;
-    case "sizes": return `Every pane has ${r.set.slice(0, -1).join(", ")} or ${r.set.at(-1)} squares`;
-    case "rect": return "Every pane is a rectangle of 2+ squares";
-    case "distinct": return "No two panes are the same shape";
-    case "count": return `Exactly ${r.k} panes`;
-    case "nbsize": return "Touching panes are different sizes";
-  }
-  return "";
-}
-function paneOk(r, cells) {
-  switch (r.type) {
-    case "shapes": return cells.length <= 6 && r.shapes.includes(canon(cells));
-    case "size": return cells.length === r.n;
-    case "sizes": return r.set.includes(cells.length);
-    case "rect": return cells.length >= 2 && isRect(cells);
-  }
-  return true;
-}
-function pool(rules) {
-  let list = [...POLY.entries()].filter(([, c]) => c.length >= 2);
-  const pr = rules.filter((r) => PER_PANE.has(r.type));
-  if (!pr.some((r) => r.type !== "rect")) list = list.filter(([, c]) => c.length <= 5);
-  return list.filter(([, c]) => pr.every((r) => paneOk(r, c)));
-}
-
-/* ================= LEVELS + GENERATION ================= */
-const LEVELS = [
-  { rules: [{ type: "shapes", shapes: [SHAPES.I3] }], target: 12 },
-  { rules: [{ type: "shapes", shapes: [SHAPES.L3] }], target: 15 },
-  { rules: [{ type: "shapes", shapes: [SHAPES.I3, SHAPES.L3] }], target: 18 },
-  { rules: [{ type: "size", n: 4 }], target: 20 },
-  { rules: [{ type: "rect" }, { type: "count", k: 0 }], target: 22 },
-  { rules: [{ type: "size", n: 4 }, { type: "distinct" }], target: 20 },
-  { rules: [{ type: "sizes", set: [2, 3, 4] }, { type: "nbsize" }], target: 22 },
-  { rules: [{ type: "shapes", shapes: [SHAPES.T4, SHAPES.L4, SHAPES.S4] }], target: 28 },
-  { rules: [{ type: "size", n: 5 }], target: 30 },
-  { rules: [{ type: "sizes", set: [3, 4, 5] }, { type: "distinct" }, { type: "count", k: 0 }], target: 30 },
-];
-function randomLevel(l) {
-  const t = Math.min(26 + (l - 10) * 2, 44);
-  const templates = [
-    () => [{ type: "shapes", shapes: shuffle(Object.values(SHAPES)).slice(0, ri(1, 3)) }],
-    () => [{ type: "size", n: ri(3, 5) }],
-    () => [{ type: "size", n: ri(4, 5) }, { type: "distinct" }],
-    () => [{ type: "sizes", set: pick([[2, 3, 4], [3, 4, 5], [2, 4], [3, 5]]) }, { type: "nbsize" }],
-    () => [{ type: "rect" }, { type: "count", k: 0 }, { type: "nbsize" }],
-    () => [{ type: "sizes", set: [3, 4, 5] }, { type: "distinct" }, { type: "nbsize" }],
-  ];
-  return { rules: pick(templates)(), target: t };
-}
-const levelDef = (l) => (l <= LEVELS.length ? LEVELS[l - 1] : randomLevel(l));
-
-// Grow a board out of panes that already obey the rules, so every board can be solved.
-function generate(def) {
-  const rules = def.rules.map((r) => ({ ...r }));
-  const shapes = pool(rules);
-  const distinct = rules.some((r) => r.type === "distinct"), nb = rules.some((r) => r.type === "nbsize");
-  let best = null;
-  for (let attempt = 0; attempt < 60; attempt++) {
-    const owner = new Map(), panes = [], used = new Set();
-    let filled = 0;
-    const tryPlace = (abs, k) => {
-      if (abs.some((c) => owner.has(key(...c)))) return false;
-      if (nb) for (const [x, y] of abs) for (const [dx, dy] of DIRS) {
-        const o = owner.get(key(x + dx, y + dy)); if (o !== undefined && panes[o].length === abs.length) return false; }
-      const id = panes.length; panes.push(abs); abs.forEach((c) => owner.set(key(...c), id));
-      used.add(k); filled += abs.length; return true;
-    };
-    const avail = () => shapes.filter(([k]) => !distinct || !used.has(k));
-    { const [k, c] = pick(avail()); tryPlace(pick(orientations(c)), k); }
-    let fails = 0;
-    while (filled < def.target && fails < 400) {
-      const a = avail(); if (!a.length) break;
-      const front = new Map();
-      for (const k of owner.keys()) { const [x, y] = unkey(k);
-        for (const [dx, dy] of DIRS) { const nk = key(x + dx, y + dy); if (!owner.has(nk)) front.set(nk, (front.get(nk) || 0) + 1); } }
-      const fr = [...front.entries()]; fr.sort((p, q) => q[1] - p[1] || rand() - 0.5);
-      const [ek] = rand() < 0.7 ? fr[ri(0, Math.min(3, fr.length - 1))] : pick(fr);
-      const [ex, ey] = unkey(ek);
-      const [k, c] = pick(a), o = pick(orientations(c)), [ax, ay] = pick(o);
-      const abs = o.map(([x, y]) => [x - ax + ex, y - ay + ey]);
-      if (filled + abs.length > def.target + 2 || !tryPlace(abs, k)) fails++;
-    }
-    const score = Math.abs(filled - def.target);
-    if (!best || score < best.score) best = { panes, score };
-    if (score <= 2) break;
-  }
-  const all = best.panes.flat(), mx = Math.min(...all.map((c) => c[0])), my = Math.min(...all.map((c) => c[1]));
-  const solution = best.panes.map((p) => p.map(([x, y]) => [x - mx, y - my]));
-  for (const r of rules) if (r.type === "count") r.k = solution.length;
-  return { cells: solution.flat().sort((a, b) => a[1] - b[1] || a[0] - b[0]), rules, solution };
-}
+/* ================= PROGRESS (this browser) =================
+   gk-progress: { max: highest level unlocked, best: { level: seconds }, hinted: { level: true } }
+   gk-drafts:   { level: { walls, elapsed, hints } }   unfinished work on each level
+   gk-current:  the level on screen */
+const PROG = Object.assign({ max: 1, best: {}, hinted: {} }, store.get("gk-progress") || {});
+if (!store.get("gk-progress") && store.get("gk-level")) PROG.max = Math.min(TOTAL, Math.max(1, store.get("gk-level"))); // from the first version
+const DRAFTS = store.get("gk-drafts") || {};
+const saveProg = () => store.set("gk-progress", PROG);
+const unlocked = (n) => n >= 1 && n <= Math.min(TOTAL, PROG.max);
 
 /* ================= GAME STATE =================
-   The board is a set of walls between neighbouring squares. Every connected
-   group of squares (the frame plus walls around it) is a region; a region that
-   obeys the per-pane rules is a finished pane and turns to glass. */
-let level = 1, cells = [], cellSet = new Set(), W = 0, H = 0, rules = [], solution = [];
-let walls = new Set(), history = [], regions = [], regionOf = new Map(), evalState = null;
+   The board is a set of lines between neighbouring squares: the level's fixed lines
+   plus the player's. Every connected group of squares is a region; a region that
+   obeys the per-pane rules (and has no line ending inside it) is a finished pane. */
+let level = 1, P = null, cells = [], cellSet = new Set(), W = 0, H = 0;
+let fixed = new Set(), walls = new Set(), history = [], regions = [], regionOf = new Map(), evalState = null;
 let mode = store.get("gk-mode") === "lines" ? "lines" : "boxes";
-let elapsed = 0, startedAt = 0, solvedFlag = false, hints = 0;
-
-// edge ids: "x,y,r" is the wall right of square (x,y); "x,y,d" the wall below it
-const edgeR = (x, y) => `${x},${y},r`, edgeD = (x, y) => `${x},${y},d`;
-function edgeBetween(a, b) {
-  const [ax, ay] = a, [bx, by] = b;
-  if (ay === by && Math.abs(ax - bx) === 1) return edgeR(Math.min(ax, bx), ay);
-  if (ax === bx && Math.abs(ay - by) === 1) return edgeD(ax, Math.min(ay, by));
-  return null;
-}
+let elapsed = 0, startedAt = 0, solvedFlag = false, hints = 0, selection = [];
+const isWall = (e) => walls.has(e) || fixed.has(e);
+const allWalls = () => [...fixed, ...walls];
 const isInner = (id) => { const [x, y, t] = id.split(","); const X = +x, Y = +y;
   return cellSet.has(key(X, Y)) && cellSet.has(t === "r" ? key(X + 1, Y) : key(X, Y + 1)); };
 
@@ -389,71 +268,45 @@ function computeRegions() {
       const [x, y] = st.pop(); list.push([x, y]);
       for (const [dx, dy] of DIRS) {
         const nx = x + dx, ny = y + dy, nk = key(nx, ny);
-        if (!cellSet.has(nk) || regionOf.has(nk) || walls.has(edgeBetween([x, y], [nx, ny]))) continue;
+        if (!cellSet.has(nk) || regionOf.has(nk) || isWall(edgeBetween([x, y], [nx, ny]))) continue;
         regionOf.set(nk, id); st.push([nx, ny]);
       }
     }
-    regions.push(list);
+    regions.push(list.sort((a, b) => a[1] - b[1] || a[0] - b[0]));
   }
 }
-
-function evaluate() {
-  const valid = regions.map((c) => rules.filter((r) => PER_PANE.has(r.type)).every((r) => paneOk(r, c)));
-  const conflict = new Set(), status = [];
-  const validCells = regions.reduce((s, c, i) => s + (valid[i] ? c.length : 0), 0);
-  const allValid = valid.every(Boolean);
-  for (const r of rules) {
-    let bad = false, extra = "";
-    if (PER_PANE.has(r.type)) {
-      // a region that's too big is still being split, so per-pane rules only turn green, never red
-    } else if (r.type === "distinct") {
-      const seen = new Map();
-      regions.forEach((c, i) => { if (!valid[i]) return; const k = canon(c);
-        if (seen.has(k)) { conflict.add(i); conflict.add(seen.get(k)); bad = true; } else seen.set(k, i); });
-    } else if (r.type === "nbsize") {
-      regions.forEach((c, i) => { if (!valid[i]) return;
-        for (const [x, y] of c) for (const [dx, dy] of DIRS) {
-          const o = regionOf.get(key(x + dx, y + dy));
-          if (o !== undefined && o !== i && valid[o] && regions[o].length === c.length) { conflict.add(i); bad = true; } } });
-    } else if (r.type === "count") {
-      const n = regions.filter((_, i) => valid[i]).length;
-      extra = ` · ${n}/${r.k}`;
-      bad = n > r.k;
-    }
-    const ok = !bad && allValid && (r.type !== "count" || regions.length === r.k);
-    status.push({ state: bad ? "bad" : ok ? "ok" : "open", extra });
-  }
-  const win = allValid && conflict.size === 0 && status.every((s) => s.state === "ok");
-  return { valid, conflict, status, validCells, win };
-}
-
 function changed(record = true) {
-  computeRegions(); evalState = evaluate();
+  computeRegions(); evalState = GK.evaluate(P, regions, regionOf, allWalls());
   if (record) { touchTimer(); persist(); }
   draw(); paintRules(); paintStatus();
   if (evalState.win && !solvedFlag) { solvedFlag = true; onSolved(); }
 }
 function pushHistory() { history.push([...walls]); if (history.length > 300) history.shift(); }
 
-/* ================= LOAD / NEW ================= */
-function loadPuzzle(p, wallList, secs) {
-  level = p.level; cells = p.cells; rules = p.rules; solution = p.solution || [];
-  cellSet = new Set(cells.map((c) => key(...c)));
+/* ================= LOAD ================= */
+function loadLevel(n) {
+  n = Math.max(1, Math.min(TOTAL, n));
+  if (P && !solvedFlag) saveDraft();
+  level = n; P = GK.decodeLevel(LEVELS[n - 1], n);
+  cells = P.cells; cellSet = P.ctx.cellSet; fixed = new Set(P.givens);
   W = Math.max(...cells.map((c) => c[0])) + 1; H = Math.max(...cells.map((c) => c[1])) + 1;
-  walls = new Set((wallList || []).filter(isInner)); history = []; selection = []; solvedFlag = false; hints = p.hints || 0;
-  elapsed = secs || 0; startedAt = 0;
-  shapeColor.clear(); buildRules(); resize();
+  const d = DRAFTS[n] || {};
+  walls = new Set((d.walls || []).filter((e) => isInner(e) && !fixed.has(e)));
+  elapsed = d.elapsed || 0; hints = d.hints || 0; startedAt = 0;
+  history = []; selection = []; solvedFlag = false; shapeColor.clear();
+  store.set("gk-current", n);
+  buildRules(); resize();
   const bar = $("#bar"); bar.style.transition = "none"; changed(false); void bar.offsetWidth; bar.style.transition = "";
-  paintTimer();
-  setHint("");
+  paintTimer(); setHint("");
 }
-function newPuzzle(l) {
-  const g = generate(levelDef(l));
-  loadPuzzle({ level: l, cells: g.cells, rules: g.rules, solution: g.solution }, [], 0);
-  persist();
+function saveDraft() {
+  if (!P) return;
+  if (walls.size || hints || currentElapsed()) DRAFTS[level] = { walls: [...walls], elapsed: currentElapsed(), hints };
+  else delete DRAFTS[level];
+  store.set("gk-drafts", DRAFTS);
 }
-const snapshotState = () => ({ v: 1, level, cells, rules, solution, walls: [...walls], elapsed: currentElapsed(), mode, hints });
-function persist() { store.set("gk-state", snapshotState()); markDirty(); }
+const snapshotState = () => ({ v: 2, level, walls: [...walls], elapsed: currentElapsed(), hints, max: PROG.max });
+function persist() { saveDraft(); markDirty(); }
 
 /* ================= TIMER ================= */
 const currentElapsed = () => Math.round(elapsed + (startedAt ? (Date.now() - startedAt) / 1000 : 0));
@@ -464,8 +317,8 @@ const fmtTime = (s) => { s = Math.max(0, Math.round(s)); const h = Math.floor(s 
 function paintTimer() { $("#timer").textContent = fmtTime(currentElapsed()); }
 setInterval(paintTimer, 500);
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden") { pauseTimer(); persist(); if (dirty) saveProgress(true); }
-  else if (history.length && !solvedFlag) touchTimer();
+  if (document.visibilityState === "hidden") { pauseTimer(); if (!solvedFlag) saveDraft(); if (dirty) saveProgress(true); }
+  else if (walls.size && !solvedFlag) touchTimer();
 });
 
 /* ================= DRAWING ================= */
@@ -473,34 +326,34 @@ const board = $("#board"), ctx = board.getContext("2d");
 let CS = 44, PAD = 8, C = {};
 function readColors() {
   const cs = getComputedStyle(document.documentElement), v = (n) => cs.getPropertyValue(n).trim();
-  C = { surface: v("--surface"), ink: v("--ink"), muted: v("--muted"), line: v("--line"), wall: v("--wall"), accent: v("--accent"),
+  C = { surface: v("--surface"), ink: v("--ink"), ink2: v("--ink-2"), muted: v("--muted"), line: v("--line"), wall: v("--wall"), accent: v("--accent"),
     accentSoft: v("--accent-soft"), bad: v("--bad"), badSoft: v("--bad-soft"), bg: v("--bg") };
   C.dark = C.bg === "#111113";
 }
 readColors();
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { readColors(); draw(); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { readColors(); buildRules(); paintRules(); draw(); });
 
-// soft glass tints, light and dark
 const TINTS_L = ["#cfe3ff", "#ffd9d2", "#fff0bf", "#d5f2dc", "#e6dcff", "#ffd9ec", "#c9f1ee", "#ffe2c7", "#dfe6ee", "#eaf5c4"];
 const TINTS_D = ["#24406b", "#5b2d2a", "#5a4a1c", "#1f4a2f", "#3d3266", "#5a2843", "#1d4a47", "#5b3a1e", "#323b47", "#3f4a1d"];
 const shapeColor = new Map();
 function tintFor(c) {
   const T = C.dark ? TINTS_D : TINTS_L;
-  if (rules.some((r) => r.type === "nbsize")) return T[(c.length * 3) % T.length];
+  if (P.rules.some((r) => r.type === "nbsize" || r.type === "numbers")) return T[(c.length * 3) % T.length];
   const k = canon(c);
   if (!shapeColor.has(k)) shapeColor.set(k, shapeColor.size % T.length);
   return T[shapeColor.get(k)];
 }
-
 function resize() {
-  const maxW = Math.min(window.innerWidth - 32, 560), maxH = Math.max(240, window.innerHeight * 0.52);
-  CS = Math.max(26, Math.min(58, Math.floor(Math.min((maxW - PAD * 2) / W, (maxH - PAD * 2) / H))));
+  const maxW = Math.min(window.innerWidth - 32, 560), maxH = Math.max(240, window.innerHeight * 0.5);
+  CS = Math.max(26, Math.min(58, Math.floor(Math.min((maxW - 16) / W, (maxH - 16) / H))));
   PAD = Math.max(6, Math.round(CS * 0.14));
   const dpr = window.devicePixelRatio || 1, pw = W * CS + PAD * 2, ph = H * CS + PAD * 2;
   board.width = Math.round(pw * dpr); board.height = Math.round(ph * dpr); board.style.width = pw + "px"; board.style.height = ph + "px";
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 const X = (x) => PAD + x * CS, Y = (y) => PAD + y * CS;
+function edgePath(id) { const [x, y, t] = id.split(","), a = +x, b = +y;
+  if (t === "r") { ctx.moveTo(X(a + 1), Y(b)); ctx.lineTo(X(a + 1), Y(b + 1)); } else { ctx.moveTo(X(a), Y(b + 1)); ctx.lineTo(X(a + 1), Y(b + 1)); } }
 
 let solveAnim = 0;
 function draw() {
@@ -508,14 +361,12 @@ function draw() {
   const ev = evalState, now = performance.now();
   ctx.clearRect(0, 0, W * CS + PAD * 2, H * CS + PAD * 2);
   const selSet = new Set(selection);
-  // squares
   regions.forEach((reg, i) => {
-    let fill = C.surface;
-    if (ev.conflict.has(i)) fill = C.badSoft;
-    else if (ev.valid[i]) fill = tintFor(reg);
+    let fill = null;
+    if (ev.conflict.has(i)) fill = C.badSoft; else if (ev.valid[i]) fill = tintFor(reg);
     for (const [x, y] of reg) {
       ctx.fillStyle = C.surface; ctx.fillRect(X(x), Y(y), CS, CS);
-      if (fill !== C.surface) {
+      if (fill) {
         let a = 1;
         if (solveAnim) { const d = (now - solveAnim - (x + y) * 35) / 260; a = d < 0 ? 0.55 : Math.min(1, 0.55 + d * 0.45); }
         ctx.globalAlpha = a; ctx.fillStyle = fill; ctx.fillRect(X(x), Y(y), CS, CS); ctx.globalAlpha = 1;
@@ -523,23 +374,26 @@ function draw() {
       if (selSet.has(key(x, y))) { ctx.fillStyle = C.accentSoft; ctx.fillRect(X(x), Y(y), CS, CS); }
     }
   });
-  // thin grid lines inside regions
+  // thin grid inside regions
   ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.beginPath();
   for (const [x, y] of cells) {
-    if (cellSet.has(key(x + 1, y)) && !walls.has(edgeR(x, y)) && regionOf.get(key(x, y)) === regionOf.get(key(x + 1, y))) {
-      ctx.moveTo(X(x + 1) + .5, Y(y)); ctx.lineTo(X(x + 1) + .5, Y(y + 1)); }
-    if (cellSet.has(key(x, y + 1)) && !walls.has(edgeD(x, y)) && regionOf.get(key(x, y)) === regionOf.get(key(x, y + 1))) {
-      ctx.moveTo(X(x), Y(y + 1) + .5); ctx.lineTo(X(x + 1), Y(y + 1) + .5); }
+    if (cellSet.has(key(x + 1, y)) && !isWall(edgeR(x, y))) { ctx.moveTo(X(x + 1) + .5, Y(y)); ctx.lineTo(X(x + 1) + .5, Y(y + 1)); }
+    if (cellSet.has(key(x, y + 1)) && !isWall(edgeD(x, y))) { ctx.moveTo(X(x), Y(y + 1) + .5); ctx.lineTo(X(x + 1), Y(y + 1) + .5); }
   }
   ctx.stroke();
-  // walls: every user line, plus the frame
-  const wallW = Math.max(2, CS * 0.06), frameW = Math.max(2.5, CS * 0.075);
-  ctx.lineCap = "round"; ctx.strokeStyle = C.wall;
-  ctx.lineWidth = wallW; ctx.beginPath();
-  for (const id of walls) { const [x, y, t] = id.split(","), a = +x, b = +y;
-    if (t === "r") { ctx.moveTo(X(a + 1), Y(b)); ctx.lineTo(X(a + 1), Y(b + 1)); } else { ctx.moveTo(X(a), Y(b + 1)); ctx.lineTo(X(a + 1), Y(b + 1)); } }
+  // clues: dots and numbers
+  for (const k of P.ctx.dots) { const [x, y] = unkey(k);
+    ctx.fillStyle = C.ink; ctx.beginPath(); ctx.arc(X(x) + CS / 2, Y(y) + CS / 2, Math.max(3.5, CS * 0.13), 0, Math.PI * 2); ctx.fill(); }
+  ctx.font = `600 ${Math.round(CS * 0.46)}px Inter, system-ui, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (const [k, n] of P.ctx.numbers) { const [x, y] = unkey(k); ctx.fillStyle = C.ink; ctx.fillText(n, X(x) + CS / 2, Y(y) + CS / 2 + 1); }
+  // lines: the player's, the level's fixed ones (as heavy as the frame), and any that end inside a pane
+  const wallW = Math.max(2, CS * 0.06), frameW = Math.max(2.5, CS * 0.08), stray = new Set(ev.stray);
+  ctx.lineCap = "round";
+  ctx.strokeStyle = C.wall; ctx.lineWidth = wallW; ctx.beginPath();
+  for (const id of walls) if (!stray.has(id)) edgePath(id);
   ctx.stroke();
   ctx.lineWidth = frameW; ctx.beginPath();
+  for (const id of fixed) edgePath(id);
   for (const [x, y] of cells) {
     if (!cellSet.has(key(x, y - 1))) { ctx.moveTo(X(x), Y(y)); ctx.lineTo(X(x + 1), Y(y)); }
     if (!cellSet.has(key(x, y + 1))) { ctx.moveTo(X(x), Y(y + 1)); ctx.lineTo(X(x + 1), Y(y + 1)); }
@@ -547,16 +401,19 @@ function draw() {
     if (!cellSet.has(key(x + 1, y))) { ctx.moveTo(X(x + 1), Y(y)); ctx.lineTo(X(x + 1), Y(y + 1)); }
   }
   ctx.stroke();
-  // region size, small in the top-left square (like killer-sudoku cage totals)
-  ctx.font = `600 ${Math.max(9, Math.round(CS * 0.24))}px Inter, system-ui, sans-serif`; ctx.textAlign = "left"; ctx.textBaseline = "top";
-  regions.forEach((reg, i) => {
-    if (regions.length === 1) return;
+  // the player's lines that don't separate anything yet: dashed, as a gentle "this isn't doing anything"
+  const loose = [...stray].filter((id) => !fixed.has(id));
+  if (loose.length) { ctx.save(); ctx.strokeStyle = C.muted; ctx.lineWidth = wallW; ctx.lineCap = "butt"; ctx.setLineDash([CS * 0.12, CS * 0.1]);
+    ctx.beginPath(); for (const id of loose) edgePath(id); ctx.stroke(); ctx.restore(); }
+  // region size, small in the top-left square
+  ctx.font = `600 ${Math.max(9, Math.round(CS * 0.22))}px Inter, system-ui, sans-serif`; ctx.textAlign = "left"; ctx.textBaseline = "top";
+  if (regions.length > 1) regions.forEach((reg, i) => {
     const [x, y] = reg[0];
     ctx.fillStyle = ev.conflict.has(i) ? C.bad : ev.valid[i] ? C.ink : C.muted;
-    ctx.globalAlpha = ev.valid[i] ? 0.55 : 0.9;
-    ctx.fillText(reg.length, X(x) + CS * 0.12, Y(y) + CS * 0.1); ctx.globalAlpha = 1;
+    ctx.globalAlpha = ev.valid[i] ? 0.5 : 0.85;
+    ctx.fillText(reg.length, X(x) + CS * 0.1, Y(y) + CS * 0.08); ctx.globalAlpha = 1;
   });
-  // selection outline + count
+  // selection
   if (selection.length) {
     ctx.strokeStyle = C.accent; ctx.lineWidth = 2; ctx.beginPath();
     for (const k of selection) { const [x, y] = unkey(k);
@@ -566,50 +423,60 @@ function draw() {
       if (!selSet.has(key(x + 1, y))) { ctx.moveTo(X(x + 1), Y(y)); ctx.lineTo(X(x + 1), Y(y + 1)); } }
     ctx.stroke();
     const [lx, ly] = unkey(selection.at(-1));
-    ctx.fillStyle = C.accent; ctx.font = `700 ${Math.round(CS * 0.4)}px Inter, system-ui, sans-serif`;
-    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(selection.length, X(lx) + CS / 2, Y(ly) + CS / 2 + 1);
+    if (!P.ctx.numbers.has(selection.at(-1)) && !P.ctx.dots.has(selection.at(-1))) {
+      ctx.fillStyle = C.accent; ctx.font = `700 ${Math.round(CS * 0.4)}px Inter, system-ui, sans-serif`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(selection.length, X(lx) + CS / 2, Y(ly) + CS / 2 + 1);
+    }
   }
-  // line-mode hover
-  if (mode === "lines" && hoverEdge && !stroke) {
-    const [x, y, t] = hoverEdge.split(","), a = +x, b = +y;
-    ctx.strokeStyle = C.accent; ctx.lineWidth = wallW + 1; ctx.globalAlpha = walls.has(hoverEdge) ? 0.9 : 0.55; ctx.beginPath();
-    if (t === "r") { ctx.moveTo(X(a + 1), Y(b)); ctx.lineTo(X(a + 1), Y(b + 1)); } else { ctx.moveTo(X(a), Y(b + 1)); ctx.lineTo(X(a + 1), Y(b + 1)); }
-    ctx.stroke(); ctx.globalAlpha = 1;
+  if (mode === "lines" && hoverEdge && !stroke && !fixed.has(hoverEdge)) {
+    ctx.strokeStyle = C.accent; ctx.lineWidth = wallW + 1; ctx.globalAlpha = walls.has(hoverEdge) ? 0.9 : 0.55;
+    ctx.beginPath(); edgePath(hoverEdge); ctx.stroke(); ctx.globalAlpha = 1;
   }
   if (solveAnim && now - solveAnim < 260 + (W + H) * 35) requestAnimationFrame(draw); else solveAnim = 0;
 }
 
-function shapeIcon(cells, s = 9) {
-  const n = normalize(cells), w = Math.max(...n.map((c) => c[0])) + 1, h = Math.max(...n.map((c) => c[1])) + 1;
-  const cv = document.createElement("canvas"), dpr = window.devicePixelRatio || 1;
-  cv.width = (w * s + 2) * dpr; cv.height = (h * s + 2) * dpr; cv.style.width = (w * s + 2) + "px"; cv.style.height = (h * s + 2) + "px";
-  const c = cv.getContext("2d"); c.setTransform(dpr, 0, 0, dpr, 0, 0);
-  c.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--ink").trim();
-  for (const [x, y] of n) { c.beginPath(); c.roundRect ? c.roundRect(1 + x * s + .5, 1 + y * s + .5, s - 1, s - 1, 1.5) : c.rect(1 + x * s, 1 + y * s, s - 1, s - 1); c.fill(); }
-  return cv;
+/* ================= RULES + STATUS ================= */
+function ruleIcon(r) {
+  // a tiny picture for each rule type
+  const cv = document.createElement("canvas"), dpr = window.devicePixelRatio || 1, s = 9;
+  const shapes = r.type === "shapes" ? r.shapes.map((k) => POLY.get(k)) : [];
+  if (!shapes.length) return null;
+  const wrap = document.createElement("span"); wrap.className = "shapes";
+  for (const cells of shapes) {
+    const n = normalize(cells), w = Math.max(...n.map((c) => c[0])) + 1, h = Math.max(...n.map((c) => c[1])) + 1;
+    const cv2 = document.createElement("canvas");
+    cv2.width = (w * s + 2) * dpr; cv2.height = (h * s + 2) * dpr; cv2.style.width = (w * s + 2) + "px"; cv2.style.height = (h * s + 2) + "px";
+    const c = cv2.getContext("2d"); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.fillStyle = C.ink;
+    for (const [x, y] of n) { c.beginPath(); c.roundRect ? c.roundRect(1 + x * s + .5, 1 + y * s + .5, s - 1, s - 1, 1.5) : c.rect(1 + x * s, 1 + y * s, s - 1, s - 1); c.fill(); }
+    wrap.appendChild(cv2);
+  }
+  void cv;
+  return wrap;
 }
 const ruleEls = [];
 function buildRules() {
+  if (!P) return;
   const box = $("#rules"); box.innerHTML = ""; ruleEls.length = 0;
-  for (const r of rules) {
+  for (const r of P.rules) {
     const el = document.createElement("div"); el.className = "rule";
     const st = document.createElement("span"); st.className = "st"; st.textContent = "✓";
     const txt = document.createElement("span");
     el.append(st, txt);
-    if (r.type === "shapes") { const sh = document.createElement("span"); sh.className = "shapes";
-      r.shapes.forEach((s) => sh.appendChild(shapeIcon(POLY.get(s)))); el.appendChild(sh); }
+    const icon = ruleIcon(r); if (icon) el.appendChild(icon);
     box.appendChild(el); ruleEls.push({ el, st, txt, r });
   }
 }
 function paintRules() {
+  if (!evalState) return;
   ruleEls.forEach((re, i) => { const s = evalState.status[i];
     re.el.className = "rule " + (s.state === "open" ? "" : s.state);
     re.st.textContent = s.state === "bad" ? "!" : "✓";
-    re.txt.textContent = ruleText(re.r) + s.extra; });
+    re.txt.textContent = GK.ruleText(re.r) + s.extra; });
 }
 function paintStatus() {
   $("#lvl").textContent = level;
   $("#sq").textContent = `${evalState.validCells}/${cells.length}`;
+  $("#chapter").textContent = `${LEVELS[level - 1].chapter} · ${level} of ${TOTAL}${PROG.best[level] != null ? ` · best ${fmtTime(PROG.best[level])}` : ""}`;
   $("#bar").style.width = (evalState.validCells / cells.length * 100) + "%";
   $("#undo").disabled = !history.length;
   $("#makePane").classList.toggle("show", selection.length > 0);
@@ -619,13 +486,14 @@ let hintTimer = 0;
 function setHint(t, bad) { const h = $("#hint"); h.textContent = t; h.className = "hint" + (bad ? " bad" : ""); clearTimeout(hintTimer);
   if (t) hintTimer = setTimeout(() => setHint(""), 3500); }
 function paintHowto() {
-  $("#howto").innerHTML = mode === "boxes"
+  const extra = fixed.size ? " Heavy lines are part of the puzzle and can't be moved." : "";
+  $("#howto").innerHTML = (mode === "boxes"
     ? "Drag across squares to make a pane, or tap squares one by one and press <b>Make pane</b>. Tap a coloured pane to undo it."
-    : "Drag along the grid lines to draw walls. Drag over a wall to erase it. Tap a line to toggle it.";
+    : "Drag along the grid lines to draw lines. Drag over a line to erase it. Tap a line to toggle it.") + extra;
 }
 
 /* ================= INPUT: BOXES ================= */
-let selection = [], press = null;
+let press = null;
 function cellAt(ev) {
   const r = board.getBoundingClientRect();
   const x = Math.floor((ev.clientX - r.left - PAD) / CS), y = Math.floor((ev.clientY - r.top - PAD) / CS);
@@ -635,17 +503,17 @@ const adjacentTo = (k, list) => { const [x, y] = unkey(k); return list.some((o) 
 const connected = (list) => { if (!list.length) return false; const set = new Set(list), seen = new Set([list[0]]), st = [list[0]];
   while (st.length) { const [x, y] = unkey(st.pop()); for (const [dx, dy] of DIRS) { const n = key(x + dx, y + dy); if (set.has(n) && !seen.has(n)) { seen.add(n); st.push(n); } } }
   return seen.size === set.size; };
-
-// Turn a set of squares into its own region: walls round the outside, none inside.
+// make a set of squares its own region: lines round the outside, none inside (fixed lines stay)
 function carve(list) {
   const set = new Set(list);
   pushHistory();
   for (const k of list) { const [x, y] = unkey(k);
     for (const [dx, dy] of DIRS) { const nk = key(x + dx, y + dy); if (!cellSet.has(nk)) continue;
-      const e = edgeBetween([x, y], [x + dx, y + dy]); if (set.has(nk)) walls.delete(e); else walls.add(e); } }
+      const e = edgeBetween([x, y], [x + dx, y + dy]); if (fixed.has(e)) continue;
+      if (set.has(nk)) walls.delete(e); else walls.add(e); } }
   selection = []; changed();
 }
-// Dissolve a finished pane back into the unfinished space next to it (finished neighbours keep their walls).
+// dissolve a finished pane back into the unfinished space around it
 function dissolve(i) {
   const reg = regions[i], set = new Set(reg.map((c) => key(...c)));
   pushHistory();
@@ -666,29 +534,24 @@ function makePane() {
 let stroke = null, hoverEdge = null;
 function gridPos(ev) { const r = board.getBoundingClientRect(); return [(ev.clientX - r.left - PAD) / CS, (ev.clientY - r.top - PAD) / CS]; }
 function nearestEdge(gx, gy) {
-  // the nearest inner grid line segment to a point, if it's close enough
   const fx = gx - Math.floor(gx), fy = gy - Math.floor(gy), cx = Math.floor(gx), cy = Math.floor(gy);
-  const cand = [];
-  cand.push([Math.min(fx, 1 - fx), fx < .5 ? edgeR(cx - 1, cy) : edgeR(cx, cy)]);
-  cand.push([Math.min(fy, 1 - fy), fy < .5 ? edgeD(cx, cy - 1) : edgeD(cx, cy)]);
+  const cand = [[Math.min(fx, 1 - fx), fx < .5 ? edgeR(cx - 1, cy) : edgeR(cx, cy)], [Math.min(fy, 1 - fy), fy < .5 ? edgeD(cx, cy - 1) : edgeD(cx, cy)]];
   cand.sort((a, b) => a[0] - b[0]);
   for (const [d, id] of cand) if (d < 0.28 && isInner(id)) return id;
   return null;
 }
 function segmentEdge(v1, v2) {
-  // the wall between two neighbouring grid corners
   const [x1, y1] = v1, [x2, y2] = v2;
-  if (x1 === x2) { const y = Math.min(y1, y2); const id = edgeR(x1 - 1, y); return isInner(id) ? id : null; }
-  const x = Math.min(x1, x2); const id = edgeD(x, y1 - 1); return isInner(id) ? id : null;
+  if (x1 === x2) { const id = edgeR(x1 - 1, Math.min(y1, y2)); return isInner(id) ? id : null; }
+  const id = edgeD(Math.min(x1, x2), y1 - 1); return isInner(id) ? id : null;
 }
 function strokeTo(v) {
-  // walk from the last corner to this one along the grid, one segment at a time
   let [cx, cy] = stroke.v;
   while (cx !== v[0] || cy !== v[1]) {
     const nx = cx + Math.sign(v[0] - cx) * (Math.abs(v[0] - cx) >= Math.abs(v[1] - cy) ? 1 : 0);
     const ny = cy + (nx === cx ? Math.sign(v[1] - cy) : 0);
     const id = segmentEdge([cx, cy], [nx, ny]);
-    if (id) {
+    if (id && !fixed.has(id)) {
       if (stroke.paint === null) stroke.paint = !walls.has(id);
       if (!stroke.saved) { pushHistory(); stroke.saved = true; }
       if (stroke.paint) walls.add(id); else walls.delete(id);
@@ -703,14 +566,9 @@ function strokeTo(v) {
 board.addEventListener("pointerdown", (ev) => {
   if (modalOpen()) return;
   ev.preventDefault(); board.setPointerCapture(ev.pointerId);
-  if (mode === "lines") {
-    const [gx, gy] = gridPos(ev);
-    stroke = { v: [Math.round(gx), Math.round(gy)], paint: null, did: false, saved: false, sx: gx, sy: gy };
-    return;
-  }
+  if (mode === "lines") { const [gx, gy] = gridPos(ev); stroke = { v: [Math.round(gx), Math.round(gy)], paint: null, did: false, saved: false }; return; }
   const k = cellAt(ev); if (!k) return;
-  press = { start: k, drag: [k], moved: false, right: ev.button === 2 };
-  draw();
+  press = { start: k, drag: [k], moved: false };
 });
 board.addEventListener("pointermove", (ev) => {
   if (mode === "lines") {
@@ -729,18 +587,17 @@ board.addEventListener("pointerup", (ev) => {
   if (mode === "lines") {
     if (stroke && !stroke.did) {
       const [gx, gy] = gridPos(ev), e = nearestEdge(gx, gy);
-      if (e) { pushHistory(); if (walls.has(e)) walls.delete(e); else walls.add(e); changed(); }
+      if (e && fixed.has(e)) setHint("That line is part of the puzzle.");
+      else if (e) { pushHistory(); if (walls.has(e)) walls.delete(e); else walls.add(e); changed(); }
     } else if (stroke) changed();
     stroke = null; return;
   }
   if (!press) return;
   const p = press; press = null;
   if (p.moved) { carve(p.drag); return; }
-  // a tap
   const i = regionOf.get(p.start);
   if (selection.length === 0 && evalState.valid[i] && regions.length > 1) { dissolve(i); return; }
-  if (selection.includes(p.start)) selection = selection.filter((k) => k !== p.start);
-  else selection.push(p.start);
+  if (selection.includes(p.start)) selection = selection.filter((k) => k !== p.start); else selection.push(p.start);
   draw(); paintStatus();
 });
 board.addEventListener("pointercancel", () => { stroke = null; press = null; draw(); });
@@ -758,26 +615,28 @@ $("#makePane").onclick = makePane;
 function undo() { if (!history.length) return; walls = new Set(history.pop()); selection = []; changed(); }
 $("#undo").onclick = undo;
 $("#clear").onclick = () => { if (!walls.size && !selection.length) return; pushHistory(); walls = new Set(); selection = []; changed(); };
-$("#skip").onclick = () => newPuzzle(level);
 
-// Hint: carve one pane of the stored answer that isn't on the board yet.
+// Hint: draw in one pane of the answer that isn't on the board yet
 function hint() {
-  if (!solution.length) { setHint("No hint is available for this board. Press New for a fresh one.", true); return; }
-  const keysOf = (p) => p.map((c) => key(...c));
-  const done = (p) => { const r = regionOf.get(key(...p[0])); return regions[r].length === p.length && p.every((c) => regionOf.get(key(...c)) === r); };
-  const todo = solution.filter((p) => !done(p));
+  if (solvedFlag) return;
+  const done = (p) => { const r = regionOf.get(key(...p[0])); return evalState.valid[r] && regions[r].length === p.length && p.every((c) => regionOf.get(key(...c)) === r); };
+  const todo = P.solution.filter((p) => !done(p));
   if (!todo.length) return;
-  // prefer a pane in the unfinished space, so the hint doesn't undo work that may still be right
   const free = todo.filter((p) => p.every((c) => !evalState.valid[regionOf.get(key(...c))]));
   const p = pick(free.length ? free : todo);
-  hints++; carve(keysOf(p));
-  setHint(`Hint ${hints}: that pane is part of an answer.`);
+  hints++; PROG.hinted[level] = true; saveProg();
+  carve(p.map((c) => key(...c)));
+  setHint(`Hint ${hints}: that pane is part of the answer.`);
 }
-$("#hint").onclick = hint;
+$("#hintBtn").onclick = hint;
 
 window.addEventListener("keydown", (ev) => {
   if (ev.target.closest && ev.target.closest("input")) return;
-  if (modalOpen()) { if ((ev.code === "Space" || ev.code === "Enter") && $("#nextBtn")) { ev.preventDefault(); $("#nextBtn").click(); } return; }
+  if (modalOpen()) {
+    if ((ev.code === "Space" || ev.code === "Enter") && $("#nextBtn")) { ev.preventDefault(); $("#nextBtn").click(); }
+    if (ev.key === "Escape" && $("#levelsScrim")) $("#modalSlot").innerHTML = "";
+    return;
+  }
   const k = ev.key.toLowerCase();
   if (k === "b") setMode("boxes"); else if (k === "l") setMode("lines");
   else if (k === "z" && !ev.shiftKey) undo();
@@ -788,20 +647,54 @@ window.addEventListener("keydown", (ev) => {
 let rz = 0;
 window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (cells.length) { resize(); draw(); } }, 60); });
 
-/* ================= SOLVED ================= */
+/* ================= LEVEL PICKER ================= */
 const modalOpen = () => !!$("#modalSlot").firstChild;
+function openLevels() {
+  closePop();
+  const chapters = [];
+  LEVELS.forEach((L, i) => { const c = chapters.at(-1); if (!c || c.name !== L.chapter) chapters.push({ name: L.chapter, from: i + 1, list: [] }); chapters.at(-1).list.push(i + 1); });
+  const solvedCount = Object.keys(PROG.best).length;
+  $("#modalSlot").innerHTML = `<div class="scrim" id="levelsScrim"><div class="card levels-card" role="dialog" aria-modal="true" aria-label="Levels">
+    <h3>Levels</h3><p class="overall"><span>${solvedCount} of ${TOTAL} solved</span><span>Each level has one answer</span></p>
+    ${chapters.map((c, ci) => `<div class="chap"><b>${ci + 1}. ${esc(c.name)}</b><small>${c.list.filter((n) => PROG.best[n] != null).length}/${c.list.length}</small></div>
+      <div class="lv-grid">${c.list.map((n) => {
+        const solved = PROG.best[n] != null, open = unlocked(n);
+        return `<button class="lv${solved ? " solved" : ""}${n === level ? " current" : ""}" data-n="${n}" ${open ? "" : "disabled"} title="${open ? "Level " + n : "Solve level " + (n - 1) + " to unlock"}">${n}${solved ? `<small>${fmtTime(PROG.best[n])}</small>` : DRAFTS[n] ? "<small>in progress</small>" : ""}</button>`;
+      }).join("")}</div>`).join("")}
+    <div class="btns" style="margin-top:16px;justify-content:flex-end"><button class="btn" id="levelsClose">Close</button></div></div></div>`;
+  $("#levelsClose").onclick = () => { $("#modalSlot").innerHTML = ""; };
+  $("#levelsScrim").addEventListener("click", (e) => {
+    if (e.target.id === "levelsScrim") { $("#modalSlot").innerHTML = ""; return; }
+    const b = e.target.closest(".lv"); if (!b || b.disabled) return;
+    $("#modalSlot").innerHTML = ""; if (+b.dataset.n !== level) { loadLevel(+b.dataset.n); markDirty(); }
+  });
+  const cur = $(".lv.current"); if (cur) cur.scrollIntoView({ block: "center" });
+}
+$("#levelsBtn").onclick = openLevels;
+$("#levelTitle").onclick = openLevels;
+
+/* ================= SOLVED ================= */
 function onSolved() {
   pauseTimer(); paintTimer();
-  const secs = currentElapsed(), result = { level, seconds: secs, panes: regions.length, squares: cells.length, rules: rules.map((r) => r.type).join("+"), mode: mode + (hints ? `, ${hints} hint${hints > 1 ? "s" : ""}` : "") };
-  solveAnim = performance.now(); draw();
-  const next = level + 1;
-  store.set("gk-state", null); store.set("gk-level", Math.max(next, store.get("gk-level") || 1));
+  const secs = currentElapsed();
+  const result = { level, seconds: secs, panes: regions.length, squares: cells.length, rules: P.rules.map((r) => r.type).join("+"),
+    mode: mode + (hints ? `, ${hints} hint${hints > 1 ? "s" : ""}` : "") };
+  const prevBest = PROG.best[level], first = prevBest == null;
+  if (first || secs < prevBest) PROG.best[level] = secs;
+  PROG.max = Math.max(PROG.max, Math.min(TOTAL, level + 1));
+  saveProg(); delete DRAFTS[level]; store.set("gk-drafts", DRAFTS);
+  solveAnim = performance.now(); draw(); paintStatus();
+  const next = level < TOTAL ? level + 1 : null;
   setTimeout(() => {
+    const allDone = Object.keys(PROG.best).length >= TOTAL;
     $("#modalSlot").innerHTML = `<div class="scrim"><div class="card solved" role="dialog" aria-modal="true">
       <p style="margin:0">Level ${level} solved${hints ? ` · ${hints} hint${hints > 1 ? "s" : ""}` : ""}</p><div class="big">${fmtTime(secs)}</div>
-      <p class="save-line" id="saveLine"></p>
-      <div class="btns"><button class="btn primary" id="nextBtn">Next level <kbd style="border-color:transparent;color:inherit;opacity:.6">Space</kbd></button></div></div></div>`;
-    $("#nextBtn").onclick = () => { $("#modalSlot").innerHTML = ""; newPuzzle(next); };
+      <p class="save-line" id="localLine">${!first && secs < prevBest ? "New best time!" : !first ? `Best: ${fmtTime(prevBest)}` : allDone ? "That's every level. Nicely done!" : ""}</p>
+      <p class="save-line" id="saveLine" style="margin-top:-12px"></p>
+      <div class="btns">${next ? `<button class="btn primary" id="nextBtn">Next level <kbd style="border-color:transparent;color:inherit;opacity:.6">Space</kbd></button>` : ""}
+        <button class="btn" id="allBtn">All levels</button></div></div></div>`;
+    if (next) $("#nextBtn").onclick = () => { $("#modalSlot").innerHTML = ""; loadLevel(next); markDirty(); };
+    $("#allBtn").onclick = openLevels;
     saveResult(result);
   }, 600);
 }
@@ -867,14 +760,18 @@ function openLogin() {
 function signedIn(j, fresh) {
   ACC.name = j.username; ACC.level = j.level || 1; ACC.solved = j.solved || 0; ACC.fastest = j.fastest;
   store.set("gk-user", ACC.name); setStatus("saved"); paintAcct();
-  // pick up the account's puzzle if it's further along than this browser
+  // the account's furthest level unlocks here too
   const remote = j.progress && j.progress.state;
-  if (remote && remote.v === 1 && remote.level >= level && (remote.level > level || !history.length) && Array.isArray(remote.cells)) {
-    loadPuzzle(remote, remote.walls, remote.elapsed); store.set("gk-state", remote);
-    if (fresh) toast(`Picked up level ${remote.level} where you left off`);
-  } else if (!remote && ACC.level > level && !history.length) {
-    newPuzzle(ACC.level);
+  PROG.max = Math.max(PROG.max, Math.min(TOTAL, ACC.level), remote && remote.v === 2 ? Math.min(TOTAL, remote.max || 1) : 1); saveProg();
+  // pick up the account's unfinished level if this browser has nothing on the board
+  if (remote && remote.v === 2 && remote.level >= 1 && remote.level <= TOTAL && !walls.size && !history.length) {
+    DRAFTS[remote.level] = { walls: remote.walls || [], elapsed: remote.elapsed || 0, hints: remote.hints || 0 };
+    loadLevel(remote.level);
+    if (fresh && (remote.walls || []).length) toast(`Picked up level ${remote.level} where you left off`);
+  } else if (!remote && !walls.size && !history.length && PROG.best[level] != null && unlocked(level + 1)) {
+    loadLevel(Math.min(TOTAL, PROG.max));
   } else markDirty();
+  paintStatus();
 }
 function signOut() {
   if (dirty) saveProgress();
@@ -884,7 +781,7 @@ function closePop() { const p = $("#acctPop"); if (p && !p.hidden) { p.hidden = 
 async function openPop() {
   const pop = $("#acctPop");
   pop.innerHTML = `<h4>${esc(ACC.name)}</h4><p class="sub" id="acctStatus">${STATUS[ACC.status] || "Signed in"}</p>
-    <div class="stats3"><div><span>Level</span><b>${ACC.level}</b></div><div><span>Solved</span><b>${ACC.solved}</b></div><div><span>Fastest</span><b>${ACC.fastest == null ? "–" : fmtTime(ACC.fastest)}</b></div></div>
+    <div class="stats3"><div><span>Level</span><b>${Math.min(ACC.level, TOTAL)}</b></div><div><span>Solved</span><b>${ACC.solved}</b></div><div><span>Fastest</span><b>${ACC.fastest == null ? "–" : fmtTime(ACC.fastest)}</b></div></div>
     <p class="mini">Leaderboard</p><ul class="list" id="lb"><li><small>Loading…</small></li></ul>
     <p class="mini">Recent solves</p><ul class="list" id="hist"><li><small>Loading…</small></li></ul>
     <button class="linkbtn" id="signOutBtn">Sign out</button>`;
@@ -895,7 +792,7 @@ async function openPop() {
     const h = $("#hist"), lb = $("#lb"); if (!h) return;
     h.innerHTML = j.results.length ? j.results.map((r) => `<li><span>Level ${Number(r.level)}<br><small>${fmtDate(r.time)} · ${Number(r.panes)} panes</small></span><span>${fmtTime(Number(r.seconds))}</span></li>`).join("")
       : "<li><small>No solved puzzles yet.</small></li>";
-    lb.innerHTML = j.leaderboard.length ? j.leaderboard.map((u, i) => `<li class="${u.username.toLowerCase() === ACC.name.toLowerCase() ? "me" : ""}"><span>${i + 1}. ${esc(u.username)}</span><span>Level ${Number(u.level)} <small>· ${Number(u.solved)} solved</small></span></li>`).join("")
+    lb.innerHTML = j.leaderboard.length ? j.leaderboard.map((u, i) => `<li class="${u.username.toLowerCase() === ACC.name.toLowerCase() ? "me" : ""}"><span>${i + 1}. ${esc(u.username)}</span><span>Level ${Math.min(Number(u.level), TOTAL)} <small>· ${Number(u.solved)} solved</small></span></li>`).join("")
       : "<li><small>Nobody yet. Be first!</small></li>";
   } catch (e) { const h = $("#hist"); if (h) h.innerHTML = `<li><small>${esc(e.message)}</small></li>`; const lb = $("#lb"); if (lb) lb.innerHTML = ""; }
 }
@@ -910,12 +807,13 @@ async function saveProgress(keepalive) {
   clearTimeout(saveTimer);
   if (!API_URL || !ACC.name || !dirty) return;
   dirty = false;
-  const name = ACC.name, st = solvedFlag ? null : snapshotState();
+  const name = ACC.name, st = snapshotState();
+  if (solvedFlag) { st.walls = []; st.elapsed = 0; st.hints = 0; }
   setStatus("saving");
   try { await api("progress", { username: name, state: st }, keepalive === true); if (!dirty && ACC.name === name) setStatus("saved"); }
   catch (e) { if (ACC.name !== name) return; dirty = true; setStatus("error"); clearTimeout(retryTimer); retryTimer = setTimeout(saveProgress, 15000); }
 }
-addEventListener("pagehide", () => { pauseTimer(); store.set("gk-state", solvedFlag ? null : snapshotState()); if (dirty) saveProgress(true); });
+addEventListener("pagehide", () => { pauseTimer(); if (!solvedFlag) saveDraft(); if (dirty) saveProgress(true); });
 
 async function saveResult(r) {
   const line = $("#saveLine");
@@ -931,8 +829,8 @@ async function saveResult(r) {
   try {
     const j = await api("result", { username: ACC.name, result: r });
     ACC.level = j.level; ACC.solved = j.solved; ACC.fastest = j.fastest; setStatus("saved");
-    show("good", j.newFastest && j.solved > 1 ? "New fastest solve! Saved to your account." : "Saved to your account.");
-    api("progress", { username: ACC.name, state: null }).catch(() => {});
+    show("good", "Saved to your account.");
+    dirty = true; saveProgress();
   } catch (e) {
     show("bad", `${esc(e.message)} <button class="linkbtn" id="retrySave">Retry</button>`);
     const b = $("#retrySave"); if (b) b.onclick = () => saveResult(r);
@@ -947,16 +845,17 @@ async function initAccounts() {
 
 /* ================= START ================= */
 (function start() {
-  const st = store.get("gk-state");
-  if (st && st.v === 1 && Array.isArray(st.cells) && st.cells.length) loadPuzzle(st, st.walls, st.elapsed);
-  else newPuzzle(store.get("gk-level") || 1);
+  store.del("gk-state"); store.del("gk-level"); // from the first version, whose boards were random
+  saveProg();
+  const cur = store.get("gk-current");
+  loadLevel(unlocked(cur) ? cur : Math.min(TOTAL, PROG.max));
   setMode(mode);
   initAccounts();
 })();
 
 // hooks for automated tests
-window.__game = { get s() { return { level, cells, rules, walls, regions, solution, evalState, CS, PAD, selection }; },
-  newPuzzle, setWalls(list) { walls = new Set(list); changed(); }, carve, edgeBetween };
+window.__game = { get s() { return { level, cells, P, walls, fixed, regions, evalState, CS, PAD, selection, PROG }; },
+  loadLevel, setWalls(list) { walls = new Set(list.filter((e) => !fixed.has(e))); changed(); }, carve };
 })();
 </script>
 </body>

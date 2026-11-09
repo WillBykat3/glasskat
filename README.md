@@ -2,18 +2,44 @@
 
 A minimal logic puzzle. Each level gives you a window and a few rules about which panes are allowed. Split the whole window into panes that follow every rule.
 
-Open `index.html` in any browser. There's no build step, and the only outside file is the Inter font from Google Fonts.
+Open `index.html` in any browser. There's no build step. The page loads `core.js` (the rules and the solver) and `levels.js` (the levels), and the only outside file is the Inter font from Google Fonts.
 
 ## How to play
 
-- **Rules** sit above the board, for example "Every pane is one of these shapes", "Every pane has 4 squares", "No two panes are the same shape", "Exactly 7 panes" or "Touching panes are different sizes". Rotated or mirrored shapes count as the same shape.
-- A region that follows the pane rules turns to coloured glass. The small number in a region's corner is its size. A pane that clashes with another (same shape, or same size touching) is tinted red.
+- There are **100 levels in 10 chapters**. Every level has a fixed map, the same for everyone, and **exactly one answer**, like a sudoku.
+- A region that follows the rules turns to coloured glass. The small number in a region's corner is its size.
 - **Boxes mode** (B): drag across squares to make a pane, or tap squares one at a time and press **Make pane** (Enter). Tap a coloured pane to undo it.
-- **Lines mode** (L): drag along the grid lines to draw walls. Drag over walls to erase them, or tap a line to toggle it.
-- **Z** undoes. **Clear** wipes the board. **New** gives a different board at the same level.
-- **Hint** (H) fills in one pane of an answer. Solves that used hints say so in your results.
-- Every board can be solved. It's built by laying down panes that already follow the rules. Some boards have more than one answer, and any answer that follows every rule wins.
-- Your level and the puzzle you're in the middle of are saved in this browser, even without an account.
+- **Lines mode** (L): drag along the grid lines to draw lines, drag over a line to erase it, or tap a line to toggle it.
+- **Heavy lines** that come with a level are part of the puzzle and can't be removed.
+- A line has to separate two panes. A line that ends inside a pane shows dashed, and that pane doesn't count until the line is removed or finished.
+- **Hint** (H) fills in one pane of the answer. **Z** undoes. **Clear** removes your lines.
+- The grid button (or the level title) opens **all levels**. A level unlocks when you solve the one before it. Your best time shows on each level, and unfinished work on every level is kept.
+
+### Rules you'll meet
+
+| Rule | Meaning |
+| --- | --- |
+| Every pane is one of these shapes | Only the pictured shapes. Rotated or mirrored counts as the same shape. |
+| Every pane has N squares / 2–5 squares | Pane sizes. |
+| A number shows the size of its pane | A numbered square is in a pane with that many squares. |
+| Every pane has exactly one dot | Each pane holds one dot, never two. |
+| Every pane is a rectangle / No pane is a rectangle | Squares and straight bars count as rectangles. |
+| Every pane is symmetrical | The pane matches its mirror image (across a vertical, horizontal or diagonal line). |
+| No pane contains a 2×2 block | No four squares of one pane form a square. |
+| Every pane touches the frame | Each pane reaches the outer edge, or a hole. |
+| No two panes are the same shape / Every pane is the same shape | Compared with rotations and mirror images counted as the same. |
+| Touching panes are different sizes / shapes | Panes that share a side can't match. |
+| Exactly K panes | The number of panes. |
+
+## Making levels
+
+`levels.js` is generated. To rebuild it, or to change the plan in `tools/make-levels.js`:
+
+```bash
+node tools/make-levels.js
+```
+
+For each level the builder grows a window out of panes that already follow the rules, which becomes the answer. It then uses the solver in `core.js` to look for a second answer. While one exists, it adds a clue that the second answer breaks: a fixed line, a number, or an "Exactly K panes" rule. Then it removes every clue that isn't needed, and checks once more, with a much larger search budget, that only one answer is left. Each level has its own random seed, so the same plan always gives the same levels. Rebuilding changes the maps, so do it before people have progress you care about.
 
 ## Turning on accounts (about 5 minutes)
 
@@ -34,9 +60,9 @@ This has to be a new sheet and script. Chartkat's web app URL won't work here, b
 
 The sheet makes three tabs the first time someone signs in:
 
-- **Users:** username, level reached, puzzles solved, fastest solve
+- **Users:** username, highest level unlocked, puzzles solved, fastest solve
 - **Results:** one row per solved puzzle
-- **Progress:** the puzzle each player is in the middle of
+- **Progress:** the level each player is in the middle of, with their lines on it
 
 ### 2. Put the URL in the site
 

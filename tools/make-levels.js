@@ -1,12 +1,15 @@
 #!/usr/bin/env node
-/* Builds levels.js: 100 fixed levels, each with exactly one answer.
+/* Builds levels.js: 160 fixed levels, each with exactly one answer.
 
    For every level: grow a window out of panes that already follow the rules (that is
    the answer), then let the solver look for a second answer. While one exists, add
    a clue the second answer breaks (a fixed line, or a number when the level uses
    numbers). Finally drop every clue the puzzle doesn't need.
 
-   Usage: node tools/make-levels.js [first] [last]   (default 1 100)
+   Usage: node tools/make-levels.js              builds only levels that don't exist yet (up to PLANNED)
+          node tools/make-levels.js 161 170      builds (or rebuilds) exactly those levels
+   Levels outside the range are kept as they are. Never rebuild levels people have
+   already played: their saved progress and best times are tied to the maps.
    Same input, same output: each level has its own random seed. */
 "use strict";
 const fs = require("fs"), path = require("path");
@@ -29,6 +32,7 @@ const R = (t, extra) => Object.assign({ type: t }, extra || {});
 const CHAPTERS = [
   "First panes", "Numbers", "Dots", "Look-alikes", "Neighbours",
   "Mirrors", "Mixed I", "Mixed II", "Mixed III", "Mixed IV",
+  "Shades", "Crossings", "One of each", "Odds & evens", "Mixed V", "Mixed VI",
 ];
 function plan(n) {
   const P = (rules, target) => ({ rules, target });
@@ -70,6 +74,7 @@ function plan(n) {
     60: P([sizes(3, 6), R("symmetric"), R("nbsize")], 32),
   };
   if (fixed[n]) return fixed[n];
+  if (n > 100) return plan2(n);
   // 61–100: mixes, getting bigger
   const t = Math.min(28 + Math.floor((n - 61) / 4) * 2, 46);
   const mixes = [
@@ -89,6 +94,50 @@ function plan(n) {
   return P(mixes[(n * 7) % mixes.length](), t);
 }
 
+// 101–160: the second set of chapters (added later; levels 1–100 never change)
+function plan2(n) {
+  const P = (rules, target) => ({ rules, target });
+  const set = (...v) => ({ type: "sizes", set: v });
+  const levels = {
+    // Shades: every pane is half grey, half white
+    101: P([set(2), R("balance")], 12), 102: P([set(2, 4), R("balance")], 14), 103: P([set(2, 4), R("balance")], 18),
+    104: P([set(2, 4), R("balance"), R("rect")], 20), 105: P([set(2, 4, 6), R("balance")], 22), 106: P([set(2, 4), R("balance"), R("nbsize")], 22),
+    107: P([set(4), R("balance"), R("distinct")], 20), 108: P([set(2, 4, 6), R("balance"), R("numbers")], 26), 109: P([set(4, 6), R("balance"), R("no2x2")], 28),
+    110: P([set(2, 4, 6), R("balance"), R("dots")], 30),
+    // Crossings: lines never cross
+    111: P([sizes(2, 3), R("nocross")], 14), 112: P([sizes(2, 4), R("nocross")], 18), 113: P([sizes(2, 4), R("nocross"), R("rect")], 20),
+    114: P([sizes(2, 5), R("nocross"), R("numbers")], 22), 115: P([R("size", { n: 4 }), R("nocross")], 24), 116: P([sizes(2, 5), R("nocross"), R("dots")], 26),
+    117: P([sizes(2, 6), R("nocross"), R("rect")], 28), 118: P([sizes(3, 5), R("nocross"), R("nbshape")], 28), 119: P([sizes(2, 5), R("nocross"), R("nbsize")], 30),
+    120: P([sizes(2, 6), R("nocross"), R("numbers")], 34),
+    // One of each: no two panes the same size
+    121: P([sizes(1, 4), R("distinctsize")], 10), 122: P([sizes(1, 5), R("distinctsize")], 13), 123: P([sizes(1, 5), R("distinctsize")], 15),
+    124: P([sizes(1, 6), R("distinctsize")], 18), 125: P([sizes(1, 6), R("distinctsize"), R("rect")], 18), 126: P([sizes(1, 6), R("distinctsize"), R("nocross")], 19),
+    127: P([sizes(1, 6), R("distinctsize"), R("edge")], 20), 128: P([sizes(1, 6), R("distinctsize"), R("symmetric")], 20), 129: P([sizes(1, 6), R("distinctsize"), R("dots")], 21),
+    130: P([sizes(1, 6), R("distinctsize"), R("no2x2")], 21),
+    // Odds & evens
+    131: P([set(1, 3, 5), R("numbers")], 20), 132: P([set(2, 4, 6), R("numbers")], 24), 133: P([set(1, 3, 5), R("dots")], 22),
+    134: P([set(2, 4, 6), R("dots")], 26), 135: P([set(1, 3, 5), R("nocross")], 24), 136: P([set(2, 4), R("balance"), R("nocross")], 24),
+    137: P([set(1, 3, 5), R("nbshape"), R("numbers")], 28), 138: P([set(2, 4, 6), R("rect"), R("dots")], 30), 139: P([set(3, 5), R("symmetric"), R("numbers")], 30),
+    140: P([set(2, 4, 6), R("balance"), R("numbers")], 32),
+  };
+  if (levels[n]) return levels[n];
+  // 141–160: mixes of everything, getting bigger
+  const t = Math.min(30 + Math.floor((n - 141) / 2) * 2, 48);
+  const mixes = [
+    () => [set(2, 4, 6), R("balance"), R("nocross")],
+    () => [sizes(2, 5), R("nocross"), R("numbers"), R("nbsize")],
+    () => [sizes(2, 6), R("nocross"), R("dots"), R("rect")],
+    () => [set(2, 4), R("balance"), R("numbers")],
+    () => [sizes(3, 5), R("distinct"), R("nocross"), R("numbers")],
+    () => [set(1, 3, 5), R("numbers"), R("nbsize")],
+    () => [sizes(3, 6), R("symmetric"), R("nocross"), R("dots")],
+    () => [set(2, 4, 6), R("balance"), R("dots")],
+    () => [sizes(2, 6), R("edge"), R("nocross"), R("numbers")],
+    () => [sizes(3, 5), R("norect"), R("nocross"), R("dots")],
+  ];
+  return P(mixes[(n * 3) % mixes.length](), t);
+}
+
 /* ---------- growing a window out of an answer ---------- */
 function grow(rules, target) {
   const has = (t) => rules.some((r) => r.type === t);
@@ -96,9 +145,10 @@ function grow(rules, target) {
   if (has("same")) pool = [pick(pool.filter(([, c]) => c.length >= 2))];
   const ones = pool.filter(([, c]) => c.length === 1), others = pool.filter(([, c]) => c.length > 1);
   const distinct = has("distinct"), nbsize = has("nbsize"), nbshape = has("nbshape");
+  const distinctsize = has("distinctsize"), nocross = has("nocross");
   let best = null;
   for (let attempt = 0; attempt < 80; attempt++) {
-    const owner = new Map(), panes = [], kinds = [], used = new Set();
+    const owner = new Map(), panes = [], kinds = [], used = new Set(), usedSizes = new Set();
     let filled = 0;
     const tryPlace = (abs, k) => {
       if (abs.some((c) => owner.has(key(...c)))) return false;
@@ -108,10 +158,23 @@ function grow(rules, target) {
         if (nbshape && kinds[o] === k) return false;
       }
       const id = panes.length; panes.push(abs); kinds.push(k); abs.forEach((c) => owner.set(key(...c), id));
-      used.add(k); filled += abs.length; return true;
+      if (nocross) {
+        // four different panes round one corner means the lines cross there
+        const o = (x, y) => owner.get(key(x, y));
+        const crossAt = (vx, vy) => { const a = o(vx - 1, vy - 1), b = o(vx, vy - 1), c = o(vx - 1, vy), d = o(vx, vy);
+          return a !== undefined && b !== undefined && c !== undefined && d !== undefined && a !== b && c !== d && a !== c && b !== d; };
+        if (abs.some(([x, y]) => crossAt(x, y) || crossAt(x + 1, y) || crossAt(x, y + 1) || crossAt(x + 1, y + 1))) {
+          abs.forEach((c) => owner.delete(key(...c))); panes.pop(); kinds.pop(); return false;
+        }
+      }
+      used.add(k); usedSizes.add(abs.length); filled += abs.length; return true;
     };
     // single squares are allowed by some rules but make dull puzzles: use them rarely
-    const choose = () => { const a = (rand() < 0.08 && ones.length ? ones : others).filter(([k]) => !distinct || !used.has(k)); return a.length ? pick(a) : null; };
+    const choose = () => {
+      const ok = ([k, c]) => (!distinct || !used.has(k)) && (!distinctsize || !usedSizes.has(c.length));
+      let a = (rand() < 0.08 && ones.length ? ones : others).filter(ok);
+      if (!a.length) a = pool.filter(ok);
+      return a.length ? pick(a) : null; };
     { const c0 = choose(); if (!c0) break; tryPlace(pick(orientations(c0[1])), c0[0]); }
     let fails = 0;
     while (filled < target && fails < 500) {
@@ -147,11 +210,14 @@ function build(n) {
     // the edge rule only works if every pane in the answer reaches the frame
     if (has("edge") && !panes.every((p) => p.some(([x, y]) => DIRS.some(([dx, dy]) => !cellSet.has(key(x + dx, y + dy)))))) continue;
     const dots = has("dots") ? panes.map((p) => pick(p)) : [];
+    // shades: exactly half of every pane in the answer is grey
+    if (has("balance") && panes.some((p) => p.length % 2)) continue;
+    const shades = has("balance") ? panes.flatMap((p) => shuffle(p.slice()).slice(0, p.length / 2)) : [];
     const sizeOf = new Map(); panes.forEach((p) => p.forEach((c) => sizeOf.set(key(...c), p.length)));
     const solWalls = new Set(wallsOf(panes));
     const numbers = new Map(), givens = new Set();
     const puzzle = () => ({ cells, rules, givens: [...givens],
-      ctx: { cellSet, numbers: new Map(numbers), dots: new Set(dots.map((c) => key(...c))) } });
+      ctx: { cellSet, numbers: new Map(numbers), dots: new Set(dots.map((c) => key(...c))), shades: new Set(shades.map((c) => key(...c))) } });
     const isAnswer = (sol) => { const w = wallsOf(sol); return w.length === solWalls.size && w.every((e) => solWalls.has(e)); };
 
     let unique = false;
@@ -199,16 +265,19 @@ function build(n) {
     if (givens.size) out.givens = [...givens].sort();
     if (numbers.size) out.numbers = [...numbers.entries()].map(([k, v]) => [...unkey(k), v]).sort((a, b) => a[1] - b[1] || a[0] - b[0]);
     if (dots.length) out.dots = dots.map((c) => c.slice()).sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+    if (shades.length) out.shades = shades.map((c) => c.slice()).sort((a, b) => a[1] - b[1] || a[0] - b[0]);
     return out;
   }
   throw new Error("Couldn't build level " + n);
 }
 
 /* ---------- main ---------- */
-const first = +(process.argv[2] || 1), last = +(process.argv[3] || 100);
+const PLANNED = 160;
 const file = path.join(__dirname, "..", "levels.js");
 let levels = [];
 if (fs.existsSync(file)) { const m = fs.readFileSync(file, "utf8").match(/GK_LEVELS = (\[[\s\S]*\]);/); if (m) levels = JSON.parse(m[1]); }
+const first = +(process.argv[2] || levels.length + 1), last = +(process.argv[3] || (process.argv[2] ? process.argv[2] : PLANNED));
+if (first > last) { console.log(`Nothing to build: levels.js already has ${levels.length} levels.`); process.exit(0); }
 for (let n = first; n <= last; n++) {
   seed = (n * 2654435761) >>> 0;
   const t0 = Date.now();
@@ -217,7 +286,7 @@ for (let n = first; n <= last; n++) {
   const check = solve({ cells: d.cells, rules: d.rules, givens: d.givens, ctx: d.ctx }, 2, 2e7);
   if (check.count !== 1 || check.aborted) throw new Error(`Level ${n} isn't unique`);
   console.log(`level ${String(n).padStart(3)}  ${String(d.cells.length).padStart(2)} squares  ${String(d.solution.length).padStart(2)} panes  ` +
-    `${(L.givens || []).length} lines  ${(L.numbers || []).length} numbers  ${(L.dots || []).length} dots  ` +
+    `${(L.givens || []).length} lines  ${(L.numbers || []).length} numbers  ${(L.dots || []).length} dots  ${(L.shades || []).length} grey  ` +
     `${L.rules.map((r) => r.type).join("+")}  ${Date.now() - t0}ms`);
 }
 const body = "/* Generated by tools/make-levels.js. Each level has exactly one answer. */\n" +

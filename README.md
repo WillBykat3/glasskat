@@ -6,13 +6,15 @@ Open `index.html` in any browser. There's no build step. The page loads `core.js
 
 ## How to play
 
-- There are **100 levels in 10 chapters**. Every level has a fixed map, the same for everyone, and **exactly one answer**, like a sudoku.
+- There are **160 levels in 16 chapters**. Every level has a fixed map, the same for everyone, and **exactly one answer**, like a sudoku.
 - A region that follows the rules turns to coloured glass. The small number in a region's corner is its size.
 - **Boxes mode** (B): drag across squares to make a pane, or tap squares one at a time and press **Make pane** (Enter). Tap a coloured pane to undo it.
 - **Lines mode** (L): drag along the grid lines to draw lines, drag over a line to erase it, or tap a line to toggle it.
+- **Marks mode** (M): tap a grid line to put a ✕ on it, a note to yourself that no line goes there. Marks never count against you.
 - **Heavy lines** that come with a level are part of the puzzle and can't be removed.
 - A line has to separate two panes. A line that ends inside a pane shows dashed, and that pane doesn't count until the line is removed or finished.
-- **Hint** (H) fills in one pane of the answer. **Z** undoes. **Clear** removes your lines.
+- **Hint** opens two options: **Show one pane** (H) draws in a pane of the answer, and **Check my lines** (C) flashes any of your lines that are wrong. Both count as hints. **Z** undoes. **Clear** removes your lines; on a solved level it starts the level again (your best time is kept).
+- **?** opens **Rules & help**: the basics, the controls and every rule with a small example. Tap any rule above the board to jump to its explanation. The first time a level uses a rule you haven't met, a **New rule** card explains it.
 - The grid button (or the level title) opens **all levels**. A level unlocks when you solve the one before it. Your best time shows on each level, and unfinished work on every level is kept.
 
 ### Rules you'll meet
@@ -30,6 +32,9 @@ Open `index.html` in any browser. There's no build step. The page loads `core.js
 | No two panes are the same shape / Every pane is the same shape | Compared with rotations and mirror images counted as the same. |
 | Touching panes are different sizes / shapes | Panes that share a side can't match. |
 | Exactly K panes | The number of panes. |
+| Every pane is half grey, half white | Each pane has as many grey squares as white ones. |
+| No two panes are the same size | Every pane has a different number of squares. |
+| Lines never cross | Four panes never meet at one corner, so lines meet in T's and L's, never a +. A red dot marks a crossing. |
 
 ## Making levels
 
@@ -38,6 +43,8 @@ Open `index.html` in any browser. There's no build step. The page loads `core.js
 ```bash
 node tools/make-levels.js
 ```
+
+Run `node tools/make-levels.js 161 170` (for example) to add levels after the last one without touching the earlier ones; that's how levels 101–160 were added, so everyone's progress on 1–100 stayed valid.
 
 For each level the builder grows a window out of panes that already follow the rules, which becomes the answer. It then uses the solver in `core.js` to look for a second answer. While one exists, it adds a clue that the second answer breaks: a fixed line, a number, or an "Exactly K panes" rule. Then it removes every clue that isn't needed, and checks once more, with a much larger search budget, that only one answer is left. Each level has its own random seed, so the same plan always gives the same levels. Rebuilding changes the maps, so do it before people have progress you care about.
 

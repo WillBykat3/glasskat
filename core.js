@@ -67,7 +67,8 @@ const SHAPES = {
    Per-pane rules are checked on each pane on its own. Some also need the board:
    numbers (a number is its pane's size), dots (one dot per pane), edge (touches the frame). */
 const SHAPE_ONLY = new Set(["shapes", "size", "sizes", "rect", "norect", "symmetric", "no2x2"]);
-const PER_PANE = new Set([...SHAPE_ONLY, "numbers", "dots", "edge"]);
+const PER_PANE = new Set([...SHAPE_ONLY, "numbers", "dots", "edge", "balance"]);
+const CTX_RULES = new Set(["numbers", "dots", "edge", "balance"]);
 const RANGE = (set) => set.length > 2 && set.every((v, i) => i === 0 || v === set[i - 1] + 1);
 
 function ruleText(r) {
@@ -83,6 +84,9 @@ function ruleText(r) {
     case "numbers": return "A number shows the size of its pane";
     case "dots": return "Every pane has exactly one dot";
     case "edge": return "Every pane touches the frame";
+    case "balance": return "Every pane is half grey, half white";
+    case "distinctsize": return "No two panes are the same size";
+    case "nocross": return "Lines never cross (four panes never meet at a corner)";
     case "distinct": return "No two panes are the same shape";
     case "same": return "Every pane is the same shape";
     case "count": return `Exactly ${r.k} panes`;
@@ -109,6 +113,7 @@ function paneOk(r, cells, ctx) {
   if (r.type === "numbers") return cells.every(([x, y]) => { const n = ctx.numbers.get(key(x, y)); return n === undefined || n === cells.length; });
   if (r.type === "dots") return cells.filter(([x, y]) => ctx.dots.has(key(x, y))).length === 1;
   if (r.type === "edge") return cells.some(([x, y]) => DIRS.some(([dx, dy]) => !ctx.cellSet.has(key(x + dx, y + dy))));
+  if (r.type === "balance") return cells.filter(([x, y]) => ctx.shades.has(key(x, y))).length * 2 === cells.length;
   return true;
 }
 function maxSize(rules) {
@@ -154,11 +159,20 @@ function strayWalls(walls, regionOf) {
     const ra = regionOf.get(a); if (ra !== undefined && ra === regionOf.get(b)) out.push(e); }
   return out;
 }
+// corners where four lines meet: the four squares round the corner are all in the window and every edge between them is a line
+function crossings(cellSet, isLine) {
+  const out = [];
+  for (const k of cellSet) { const [x, y] = unkey(k); // corner at the bottom-right of square (x, y)
+    if (!cellSet.has(key(x + 1, y)) || !cellSet.has(key(x, y + 1)) || !cellSet.has(key(x + 1, y + 1))) continue;
+    if (isLine(edgeR(x, y)) && isLine(edgeR(x, y + 1)) && isLine(edgeD(x, y)) && isLine(edgeD(x + 1, y))) out.push([x + 1, y + 1]); }
+  return out;
+}
 function evaluate(p, regions, regionOf, walls) {
   const ctx = p.ctx, perPane = p.rules.filter((r) => PER_PANE.has(r.type));
   const stray = strayWalls(walls, regionOf), strayIn = new Set(stray.map((e) => { const [x, y] = e.split(","); return regionOf.get(key(+x, +y)); }));
   const valid = regions.map((c, i) => !strayIn.has(i) && perPane.every((r) => paneOk(r, c, ctx)));
   const conflict = new Set(), status = [];
+  let cross = [];
   const validCells = regions.reduce((s, c, i) => s + (valid[i] ? c.length : 0), 0);
   const allValid = valid.every(Boolean);
   const touching = (i, fn) => { for (const [x, y] of regions[i]) for (const [dx, dy] of DIRS) {
@@ -175,6 +189,14 @@ function evaluate(p, regions, regionOf, walls) {
       const ks = new Map(); regions.forEach((c, i) => { if (valid[i]) { const k = canon(c); ks.set(k, (ks.get(k) || 0) + 1); } });
       if (ks.size > 1) { const top = [...ks.entries()].sort((a, b) => b[1] - a[1])[0][0];
         regions.forEach((c, i) => { if (valid[i] && canon(c) !== top) conflict.add(i); }); bad = true; }
+    } else if (r.type === "distinctsize") {
+      const seen = new Map();
+      regions.forEach((c, i) => { if (!valid[i]) return;
+        if (seen.has(c.length)) { conflict.add(i); conflict.add(seen.get(c.length)); bad = true; } else seen.set(c.length, i); });
+    } else if (r.type === "nocross") {
+      const ws = new Set(walls || []);
+      cross = crossings(ctx.cellSet, (e) => ws.has(e));
+      bad = cross.length > 0;
     } else if (r.type === "nbsize") {
       regions.forEach((c, i) => { if (valid[i] && touching(i, (o) => regions[o].length === c.length)) { conflict.add(i); bad = true; } });
     } else if (r.type === "nbshape") {
@@ -187,7 +209,7 @@ function evaluate(p, regions, regionOf, walls) {
     status.push({ state: bad ? "bad" : ok ? "ok" : "open", extra });
   }
   const win = allValid && conflict.size === 0 && status.every((s) => s.state === "ok");
-  return { valid, conflict, status, validCells, win, stray };
+  return { valid, conflict, status, validCells, win, stray, cross };
 }
 
 /* ---------- solver ----------
@@ -198,7 +220,7 @@ function solve(p, limit = 2, nodeLimit = 2e6) {
   const cells = p.cells.slice().sort((a, b) => a[1] - b[1] || a[0] - b[0]);
   const N = cells.length, idx = new Map(cells.map((c, i) => [key(...c), i]));
   const fixed = new Set(p.givens || []), ctx = p.ctx;
-  const ctxRules = p.rules.filter((r) => r.type === "numbers" || r.type === "dots" || r.type === "edge");
+  const ctxRules = p.rules.filter((r) => CTX_RULES.has(r.type));
   const byFirst = cells.map(() => []);
   for (const [k, base] of allowedPolys(p.rules)) {
     for (const o of orientations(base)) {
@@ -220,6 +242,12 @@ function solve(p, limit = 2, nodeLimit = 2e6) {
   const nbrs = cells.map(([x, y]) => DIRS.map(([dx, dy]) => idx.get(key(x + dx, y + dy))).filter((v) => v !== undefined));
   const has = (t) => p.rules.some((r) => r.type === t);
   const distinct = has("distinct"), same = has("same"), nbsize = has("nbsize"), nbshape = has("nbshape");
+  const distinctsize = has("distinctsize"), nocross = has("nocross"), usedSize = new Set();
+  // the corners of each square, as the four squares around that corner (or -1 when one is outside the window)
+  const cornersOf = cells.map(([x, y]) => [[x, y], [x + 1, y], [x, y + 1], [x + 1, y + 1]].map(([vx, vy]) =>
+    [key(vx - 1, vy - 1), key(vx, vy - 1), key(vx - 1, vy), key(vx, vy)].map((k) => (idx.has(k) ? idx.get(k) : -1))));
+  const crossAt = (q) => { if (q.includes(-1)) return false; const [a, b, c, d] = q.map((i) => owner[i]);
+    return a >= 0 && b >= 0 && c >= 0 && d >= 0 && a !== b && c !== d && a !== c && b !== d; };
   const countRule = p.rules.find((r) => r.type === "count"), K = countRule ? countRule.k : Infinity;
   const owner = new Int32Array(N).fill(-1), placed = [], used = new Map();
   const sols = []; let nodes = 0, aborted = false;
@@ -233,6 +261,7 @@ function solve(p, limit = 2, nodeLimit = 2e6) {
       if (pl.cells.some((i) => owner[i] >= 0)) continue;
       if (distinct && used.get(pl.canon)) continue;
       if (same && placed.length && placed[0].canon !== pl.canon) continue;
+      if (distinctsize && usedSize.has(pl.size)) continue;
       if (nbsize || nbshape) {
         let clash = false;
         for (const i of pl.cells) { for (const j of nbrs[i]) { const o = owner[j];
@@ -241,8 +270,10 @@ function solve(p, limit = 2, nodeLimit = 2e6) {
       }
       const id = placed.length; placed.push(pl); used.set(pl.canon, (used.get(pl.canon) || 0) + 1);
       for (const i of pl.cells) owner[i] = id;
-      dfs(pos + 1);
+      usedSize.add(pl.size);
+      if (!(nocross && pl.cells.some((i) => cornersOf[i].some(crossAt)))) dfs(pos + 1);
       for (const i of pl.cells) owner[i] = -1;
+      usedSize.delete(pl.size);
       placed.pop(); used.set(pl.canon, used.get(pl.canon) - 1);
       if (aborted || sols.length >= limit) return;
     }
@@ -260,9 +291,10 @@ function decodeLevel(L, number) {
     if (!panes.has(ch)) panes.set(ch, []); panes.get(ch).push([x, y]); }));
   const numbers = new Map((L.numbers || []).map(([x, y, n]) => [key(x, y), n]));
   const dots = new Set((L.dots || []).map(([x, y]) => key(x, y)));
+  const shades = new Set((L.shades || []).map(([x, y]) => key(x, y)));
   const cellSet = new Set(cells.map((c) => key(...c)));
   return { level: number, name: L.name || "", cells, rules: L.rules, givens: L.givens || [], solution: [...panes.values()],
-    numbersList: L.numbers || [], dotsList: L.dots || [], ctx: { cellSet, numbers, dots } };
+    numbersList: L.numbers || [], dotsList: L.dots || [], ctx: { cellSet, numbers, dots, shades } };
 }
 function encodeMap(cells, panes) {
   const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -274,7 +306,7 @@ function encodeMap(cells, panes) {
 
 const GK = { DIRS, key, unkey, normalize, rotate, flip, sig, orientations, canon, isRect, isSym, has2x2, POLY, SHAPES,
   SHAPE_ONLY, PER_PANE, ruleText, shapeOk, paneOk, maxSize, allowedPolys, edgeR, edgeD, edgeBetween, wallsOf,
-  evaluate, strayWalls, solve, decodeLevel, encodeMap };
+  evaluate, strayWalls, crossings, solve, decodeLevel, encodeMap, CTX_RULES };
 root.GK = GK;
 if (typeof module !== "undefined" && module.exports) module.exports = GK;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -153,6 +153,35 @@
   .lv:disabled { color: var(--line-2); cursor: default; background: transparent; }
   .lv:not(:disabled):hover { border-color: var(--line-2); }
   .overall { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin: -2px 0 0; }
+  /* help */
+  .help-card { max-width: 520px; max-height: min(88vh, 820px); overflow: auto; }
+  .help-card h4 { margin: 18px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .help-card ul { margin: 0; padding-left: 18px; color: var(--ink-2); font-size: 14px; }
+  .help-card li { margin: 4px 0; }
+  .help-card li b { color: var(--ink); }
+  .glossary { display: grid; gap: 2px; }
+  .gl { display: grid; grid-template-columns: 58px 1fr; gap: 12px; align-items: center; padding: 8px; border-radius: 10px; }
+  .gl.flash { background: var(--accent-soft); }
+  .gl b { display: block; font-size: 14px; color: var(--ink); }
+  .gl span { font-size: 13px; color: var(--ink-2); }
+  .gl canvas { display: block; }
+  .rule { cursor: pointer; } .rule:hover .txt { text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+  /* new-rule card */
+  .newrule { display: flex; gap: 12px; align-items: flex-start; background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 14px; font-size: 14px; color: var(--ink-2); box-shadow: var(--shadow); animation: fade .25s ease; }
+  .newrule b { color: var(--ink); display: block; margin-bottom: 2px; }
+  .newrule .tag { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); }
+  .newrule button { margin-left: auto; flex: none; }
+  /* hint menu */
+  .hint-wrap { position: relative; }
+  .menu { position: absolute; bottom: 44px; right: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+    padding: 6px; z-index: 12; width: 220px; animation: fade .12s ease; }
+  .menu button { display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: 8px; padding: 9px 10px; font: inherit;
+    font-size: 14px; color: var(--ink); cursor: pointer; }
+  .menu button:hover { background: var(--bg); }
+  .menu small { display: block; color: var(--muted); font-size: 12px; }
+  #howto a { color: var(--ink-2); text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; white-space: nowrap; }
+  #howto a:hover { color: var(--ink); }
 </style>
 </head>
 <body>
@@ -167,6 +196,7 @@
       <rect x="7" y="17" width="50" height="41" rx="10" stroke="currentColor" stroke-width="3.2"/>
     </svg><div>glass<span>kat</span></div></div>
     <div class="top-right">
+      <button class="chip icon-btn" id="helpBtn" title="Rules & help (?)" aria-label="Rules and help"><b style="font-size:15px">?</b></button>
       <button class="chip icon-btn" id="levelsBtn" title="All levels" aria-label="All levels">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>
       </button>
@@ -185,6 +215,7 @@
   <div class="chapter" id="chapter"></div>
   <div class="progress"><i id="bar"></i></div>
 
+  <div id="newRule"></div>
   <div class="rules" id="rules"></div>
 
   <div class="board-card"><canvas id="board" class="boxes"></canvas></div>
@@ -194,10 +225,15 @@
     <div class="seg" role="tablist" aria-label="Input mode">
       <button id="modeBoxes" class="on" title="Boxes (B)"><svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5" opacity=".35"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5" opacity=".35"/></svg>Boxes</button>
       <button id="modeLines" title="Lines (L)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 2v12h12M8 2v6h6"/></svg>Lines</button>
+      <button id="modeMarks" title="Marks (M): note where a line can't go"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>Marks</button>
     </div>
     <div class="actions">
       <button class="btn primary" id="makePane">Make pane</button>
-      <button class="btn" id="hintBtn" title="Fill in one pane of the answer (H)">Hint</button>
+      <span class="hint-wrap"><button class="btn" id="hintBtn" title="Hints (H)" aria-haspopup="true">Hint</button>
+        <div class="menu" id="hintMenu" hidden>
+          <button id="hintPane">Show one pane<small>Draws in one pane of the answer</small></button>
+          <button id="hintCheck">Check my lines<small>Shows any of your lines that are wrong</small></button>
+        </div></span>
       <button class="btn" id="undo" title="Undo (Z)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>Undo</button>
       <button class="btn" id="clear" title="Clear your lines">Clear</button>
     </div>
@@ -252,8 +288,8 @@ const unlocked = (n) => n >= 1 && n <= Math.min(TOTAL, PROG.max);
    obeys the per-pane rules (and has no line ending inside it) is a finished pane. */
 let level = 1, P = null, cells = [], cellSet = new Set(), W = 0, H = 0;
 let fixed = new Set(), walls = new Set(), history = [], regions = [], regionOf = new Map(), evalState = null;
-let mode = store.get("gk-mode") === "lines" ? "lines" : "boxes";
-let elapsed = 0, startedAt = 0, solvedFlag = false, hints = 0, selection = [];
+let mode = ["lines", "marks"].includes(store.get("gk-mode")) ? store.get("gk-mode") : "boxes";
+let elapsed = 0, startedAt = 0, solvedFlag = false, hints = 0, selection = [], marks = new Set(), checkFlash = null;
 const isWall = (e) => walls.has(e) || fixed.has(e);
 const allWalls = () => [...fixed, ...walls];
 const isInner = (id) => { const [x, y, t] = id.split(","); const X = +x, Y = +y;
@@ -281,7 +317,7 @@ function changed(record = true) {
   draw(); paintRules(); paintStatus();
   if (evalState.win && !solvedFlag) { solvedFlag = true; onSolved(); }
 }
-function pushHistory() { history.push([...walls]); if (history.length > 300) history.shift(); }
+function pushHistory() { history.push([[...walls], [...marks]]); if (history.length > 300) history.shift(); }
 
 /* ================= LOAD ================= */
 function loadLevel(n) {
@@ -292,20 +328,21 @@ function loadLevel(n) {
   W = Math.max(...cells.map((c) => c[0])) + 1; H = Math.max(...cells.map((c) => c[1])) + 1;
   const d = DRAFTS[n] || {};
   walls = new Set((d.walls || []).filter((e) => isInner(e) && !fixed.has(e)));
+  marks = new Set((d.marks || []).filter((e) => isInner(e) && !fixed.has(e) && !walls.has(e))); checkFlash = null;
   elapsed = d.elapsed || 0; hints = d.hints || 0; startedAt = 0;
   history = []; selection = []; solvedFlag = false; shapeColor.clear();
   store.set("gk-current", n);
-  buildRules(); resize();
+  buildRules(); showNewRule(); resize();
   const bar = $("#bar"); bar.style.transition = "none"; changed(false); void bar.offsetWidth; bar.style.transition = "";
   paintTimer(); setHint("");
 }
 function saveDraft() {
   if (!P) return;
-  if (walls.size || hints || currentElapsed()) DRAFTS[level] = { walls: [...walls], elapsed: currentElapsed(), hints };
+  if (walls.size || marks.size || hints || currentElapsed()) DRAFTS[level] = { walls: [...walls], marks: [...marks], elapsed: currentElapsed(), hints };
   else delete DRAFTS[level];
   store.set("gk-drafts", DRAFTS);
 }
-const snapshotState = () => ({ v: 2, level, walls: [...walls], elapsed: currentElapsed(), hints, max: PROG.max });
+const snapshotState = () => ({ v: 2, level, walls: [...walls], marks: [...marks], elapsed: currentElapsed(), hints, max: PROG.max });
 function persist() { saveDraft(); markDirty(); }
 
 /* ================= TIMER ================= */
@@ -329,6 +366,7 @@ function readColors() {
   C = { surface: v("--surface"), ink: v("--ink"), ink2: v("--ink-2"), muted: v("--muted"), line: v("--line"), wall: v("--wall"), accent: v("--accent"),
     accentSoft: v("--accent-soft"), bad: v("--bad"), badSoft: v("--bad-soft"), bg: v("--bg") };
   C.dark = C.bg === "#111113";
+  C.shade = C.dark ? "#3f3f48" : "#dcdcd6";
 }
 readColors();
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { readColors(); buildRules(); paintRules(); draw(); });
@@ -366,10 +404,12 @@ function draw() {
     if (ev.conflict.has(i)) fill = C.badSoft; else if (ev.valid[i]) fill = tintFor(reg);
     for (const [x, y] of reg) {
       ctx.fillStyle = C.surface; ctx.fillRect(X(x), Y(y), CS, CS);
+      if (P.ctx.shades.has(key(x, y))) { ctx.fillStyle = C.shade; ctx.fillRect(X(x), Y(y), CS, CS); }
       if (fill) {
         let a = 1;
         if (solveAnim) { const d = (now - solveAnim - (x + y) * 35) / 260; a = d < 0 ? 0.55 : Math.min(1, 0.55 + d * 0.45); }
         ctx.globalAlpha = a; ctx.fillStyle = fill; ctx.fillRect(X(x), Y(y), CS, CS); ctx.globalAlpha = 1;
+        if (P.ctx.shades.has(key(x, y))) { ctx.fillStyle = C.dark ? "rgba(0,0,0,.35)" : "rgba(0,0,0,.13)"; ctx.fillRect(X(x), Y(y), CS, CS); }
       }
       if (selSet.has(key(x, y))) { ctx.fillStyle = C.accentSoft; ctx.fillRect(X(x), Y(y), CS, CS); }
     }
@@ -405,6 +445,20 @@ function draw() {
   const loose = [...stray].filter((id) => !fixed.has(id));
   if (loose.length) { ctx.save(); ctx.strokeStyle = C.muted; ctx.lineWidth = wallW; ctx.lineCap = "butt"; ctx.setLineDash([CS * 0.12, CS * 0.1]);
     ctx.beginPath(); for (const id of loose) edgePath(id); ctx.stroke(); ctx.restore(); }
+  // marks: small crosses where the player has noted "no line here"
+  if (marks.size) { ctx.save(); ctx.strokeStyle = C.muted; ctx.lineWidth = 1.6; ctx.lineCap = "round"; ctx.beginPath();
+    const m = CS * 0.09;
+    for (const id of marks) { const [x, y, t] = id.split(","), a = +x, b = +y; const cx = t === "r" ? X(a + 1) : X(a) + CS / 2, cy = t === "r" ? Y(b) + CS / 2 : Y(b + 1);
+      ctx.moveTo(cx - m, cy - m); ctx.lineTo(cx + m, cy + m); ctx.moveTo(cx + m, cy - m); ctx.lineTo(cx - m, cy + m); }
+    ctx.stroke(); ctx.restore(); }
+  // "check my lines": wrong lines flash red
+  if (checkFlash && now < checkFlash.until) {
+    ctx.save(); ctx.strokeStyle = C.bad; ctx.lineWidth = wallW + 1.5; ctx.globalAlpha = 0.5 + 0.5 * Math.abs(Math.sin((now - checkFlash.from) / 180));
+    ctx.beginPath(); for (const id of checkFlash.wrong) if (walls.has(id)) edgePath(id); ctx.stroke(); ctx.restore();
+    requestAnimationFrame(draw);
+  } else checkFlash = null;
+  // lines that cross where the rules say they can't
+  for (const [vx, vy] of ev.cross || []) { ctx.fillStyle = C.bad; ctx.beginPath(); ctx.arc(X(vx), Y(vy), Math.max(4, CS * 0.12), 0, Math.PI * 2); ctx.fill(); }
   // region size, small in the top-left square
   ctx.font = `600 ${Math.max(9, Math.round(CS * 0.22))}px Inter, system-ui, sans-serif`; ctx.textAlign = "left"; ctx.textBaseline = "top";
   if (regions.length > 1) regions.forEach((reg, i) => {
@@ -428,7 +482,7 @@ function draw() {
       ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(selection.length, X(lx) + CS / 2, Y(ly) + CS / 2 + 1);
     }
   }
-  if (mode === "lines" && hoverEdge && !stroke && !fixed.has(hoverEdge)) {
+  if (mode !== "boxes" && hoverEdge && !stroke && !fixed.has(hoverEdge)) {
     ctx.strokeStyle = C.accent; ctx.lineWidth = wallW + 1; ctx.globalAlpha = walls.has(hoverEdge) ? 0.9 : 0.55;
     ctx.beginPath(); edgePath(hoverEdge); ctx.stroke(); ctx.globalAlpha = 1;
   }
@@ -460,8 +514,9 @@ function buildRules() {
   for (const r of P.rules) {
     const el = document.createElement("div"); el.className = "rule";
     const st = document.createElement("span"); st.className = "st"; st.textContent = "✓";
-    const txt = document.createElement("span");
-    el.append(st, txt);
+    const txt = document.createElement("span"); txt.className = "txt";
+    el.append(st, txt); el.title = "What does this mean?";
+    el.addEventListener("click", () => openHelp(r.type));
     const icon = ruleIcon(r); if (icon) el.appendChild(icon);
     box.appendChild(el); ruleEls.push({ el, st, txt, r });
   }
@@ -489,7 +544,9 @@ function paintHowto() {
   const extra = fixed.size ? " Heavy lines are part of the puzzle and can't be moved." : "";
   $("#howto").innerHTML = (mode === "boxes"
     ? "Drag across squares to make a pane, or tap squares one by one and press <b>Make pane</b>. Tap a coloured pane to undo it."
-    : "Drag along the grid lines to draw lines. Drag over a line to erase it. Tap a line to toggle it.") + extra;
+    : mode === "lines" ? "Drag along the grid lines to draw lines. Drag over a line to erase it. Tap a line to toggle it."
+    : "Tap a grid line to mark it ✕ (no line goes here). Marks are just notes for you.") + extra + ` <a href="#" id="howtoHelp">Rules & help</a>`;
+  $("#howtoHelp").onclick = (e) => { e.preventDefault(); openHelp(); };
 }
 
 /* ================= INPUT: BOXES ================= */
@@ -510,7 +567,7 @@ function carve(list) {
   for (const k of list) { const [x, y] = unkey(k);
     for (const [dx, dy] of DIRS) { const nk = key(x + dx, y + dy); if (!cellSet.has(nk)) continue;
       const e = edgeBetween([x, y], [x + dx, y + dy]); if (fixed.has(e)) continue;
-      if (set.has(nk)) walls.delete(e); else walls.add(e); } }
+      if (set.has(nk)) walls.delete(e); else { walls.add(e); marks.delete(e); } } }
   selection = []; changed();
 }
 // dissolve a finished pane back into the unfinished space around it
@@ -551,10 +608,11 @@ function strokeTo(v) {
     const nx = cx + Math.sign(v[0] - cx) * (Math.abs(v[0] - cx) >= Math.abs(v[1] - cy) ? 1 : 0);
     const ny = cy + (nx === cx ? Math.sign(v[1] - cy) : 0);
     const id = segmentEdge([cx, cy], [nx, ny]);
-    if (id && !fixed.has(id)) {
-      if (stroke.paint === null) stroke.paint = !walls.has(id);
+    const target = mode === "marks" ? marks : walls;
+    if (id && !fixed.has(id) && !(mode === "marks" && walls.has(id))) {
+      if (stroke.paint === null) stroke.paint = !target.has(id);
       if (!stroke.saved) { pushHistory(); stroke.saved = true; }
-      if (stroke.paint) walls.add(id); else walls.delete(id);
+      if (stroke.paint) { target.add(id); if (mode === "lines") marks.delete(id); } else target.delete(id);
       stroke.did = true;
     }
     cx = nx; cy = ny;
@@ -565,13 +623,16 @@ function strokeTo(v) {
 /* ================= POINTER ================= */
 board.addEventListener("pointerdown", (ev) => {
   if (modalOpen()) return;
-  ev.preventDefault(); board.setPointerCapture(ev.pointerId);
-  if (mode === "lines") { const [gx, gy] = gridPos(ev); stroke = { v: [Math.round(gx), Math.round(gy)], paint: null, did: false, saved: false }; return; }
+  ev.preventDefault();
+  closeHintMenu();
+  if (solvedFlag) { setHint("Solved! Press Clear to play this level again, or open the levels."); return; }
+  board.setPointerCapture(ev.pointerId);
+  if (mode !== "boxes") { const [gx, gy] = gridPos(ev); stroke = { v: [Math.round(gx), Math.round(gy)], paint: null, did: false, saved: false }; return; }
   const k = cellAt(ev); if (!k) return;
   press = { start: k, drag: [k], moved: false };
 });
 board.addEventListener("pointermove", (ev) => {
-  if (mode === "lines") {
+  if (mode !== "boxes") {
     const [gx, gy] = gridPos(ev);
     if (stroke) {
       const v = [Math.round(gx), Math.round(gy)];
@@ -584,11 +645,14 @@ board.addEventListener("pointermove", (ev) => {
   if (!press.drag.includes(k) && adjacentTo(k, press.drag)) { press.drag.push(k); press.moved = true; selection = press.drag.slice(); draw(); paintStatus(); }
 });
 board.addEventListener("pointerup", (ev) => {
-  if (mode === "lines") {
+  if (mode !== "boxes") {
     if (stroke && !stroke.did) {
       const [gx, gy] = gridPos(ev), e = nearestEdge(gx, gy);
       if (e && fixed.has(e)) setHint("That line is part of the puzzle.");
-      else if (e) { pushHistory(); if (walls.has(e)) walls.delete(e); else walls.add(e); changed(); }
+      else if (e && mode === "marks") {
+        if (walls.has(e)) setHint("There's a line there. Switch to Lines to remove it first.");
+        else { pushHistory(); if (marks.has(e)) marks.delete(e); else marks.add(e); changed(); }
+      } else if (e) { pushHistory(); if (walls.has(e)) walls.delete(e); else { walls.add(e); marks.delete(e); } changed(); }
     } else if (stroke) changed();
     stroke = null; return;
   }
@@ -606,15 +670,21 @@ board.addEventListener("contextmenu", (ev) => ev.preventDefault());
 
 function setMode(m) {
   mode = m; store.set("gk-mode", m); selection = []; hoverEdge = null;
-  $("#modeBoxes").classList.toggle("on", m === "boxes"); $("#modeLines").classList.toggle("on", m === "lines");
+  $("#modeBoxes").classList.toggle("on", m === "boxes"); $("#modeLines").classList.toggle("on", m === "lines"); $("#modeMarks").classList.toggle("on", m === "marks");
   board.className = m; paintHowto(); draw(); paintStatus();
 }
 $("#modeBoxes").onclick = () => setMode("boxes");
 $("#modeLines").onclick = () => setMode("lines");
+$("#modeMarks").onclick = () => setMode("marks");
 $("#makePane").onclick = makePane;
-function undo() { if (!history.length) return; walls = new Set(history.pop()); selection = []; changed(); }
+function undo() { if (!history.length || solvedFlag) return; const [w, m] = history.pop(); walls = new Set(w); marks = new Set(m); selection = []; changed(); }
 $("#undo").onclick = undo;
-$("#clear").onclick = () => { if (!walls.size && !selection.length) return; pushHistory(); walls = new Set(); selection = []; changed(); };
+$("#clear").onclick = () => {
+  if (solvedFlag) { // play a solved level again from scratch
+    walls = new Set(); marks = new Set(); selection = []; history = []; hints = 0; elapsed = 0; startedAt = 0; solvedFlag = false;
+    changed(false); paintTimer(); setHint("Fresh start. Your best time is kept."); return;
+  }
+  if (!walls.size && !marks.size && !selection.length) return; pushHistory(); walls = new Set(); marks = new Set(); selection = []; changed(); };
 
 // Hint: draw in one pane of the answer that isn't on the board yet
 function hint() {
@@ -628,17 +698,35 @@ function hint() {
   carve(p.map((c) => key(...c)));
   setHint(`Hint ${hints}: that pane is part of the answer.`);
 }
-$("#hintBtn").onclick = hint;
+// Check my lines: flash any of the player's lines that aren't in the answer
+function check() {
+  if (solvedFlag) return;
+  const right = new Set(GK.wallsOf(P.solution));
+  const wrong = [...walls].filter((e) => !right.has(e));
+  hints++; PROG.hinted[level] = true; saveProg(); persist();
+  if (!wrong.length) { setHint(walls.size ? "Every line you've drawn is right so far." : "Draw some lines first, then check them."); return; }
+  checkFlash = { wrong, from: performance.now(), until: performance.now() + 2600 };
+  setHint(`${wrong.length} of your lines ${wrong.length === 1 ? "isn't" : "aren't"} in the answer.`, true);
+  draw();
+}
+const closeHintMenu = () => { $("#hintMenu").hidden = true; };
+$("#hintBtn").onclick = (e) => { e.stopPropagation(); if (solvedFlag) { setHint("This level is already solved."); return; } $("#hintMenu").hidden = !$("#hintMenu").hidden; };
+$("#hintPane").onclick = () => { closeHintMenu(); hint(); };
+$("#hintCheck").onclick = () => { closeHintMenu(); check(); };
+document.addEventListener("click", (e) => { if (!e.target.closest(".hint-wrap")) closeHintMenu(); });
 
 window.addEventListener("keydown", (ev) => {
   if (ev.target.closest && ev.target.closest("input")) return;
   if (modalOpen()) {
     if ((ev.code === "Space" || ev.code === "Enter") && $("#nextBtn")) { ev.preventDefault(); $("#nextBtn").click(); }
-    if (ev.key === "Escape" && $("#levelsScrim")) $("#modalSlot").innerHTML = "";
+    if (ev.key === "Escape" && ($("#levelsScrim") || $("#helpScrim"))) $("#modalSlot").innerHTML = "";
     return;
   }
+  if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
   const k = ev.key.toLowerCase();
-  if (k === "b") setMode("boxes"); else if (k === "l") setMode("lines");
+  if (k === "?" || (k === "/" && ev.shiftKey)) openHelp();
+  else if (k === "b") setMode("boxes"); else if (k === "l") setMode("lines"); else if (k === "m") setMode("marks");
+  else if (k === "c" && !solvedFlag) check();
   else if (k === "z" && !ev.shiftKey) undo();
   else if (k === "h") hint();
   else if (ev.key === "Enter") makePane();
@@ -646,6 +734,104 @@ window.addEventListener("keydown", (ev) => {
 });
 let rz = 0;
 window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (cells.length) { resize(); draw(); } }, 60); });
+
+/* ================= RULES & HELP ================= */
+// Each rule: a name, what it means, and a tiny example (letters = panes in the example, all following the rule).
+const HELP = {
+  shapes: { name: "Only these shapes", text: "Every pane must be one of the pictured shapes. Turned or flipped still counts.", ex: { map: ["aab", "cab", "ccb"] } },
+  size: { name: "Pane sizes", text: "Every pane has the number of squares the rule says, for example 4, or anything from 2 to 5.", ex: { map: ["aab", "cab", "ccb"] } },
+  numbers: { name: "Numbers", text: "A number in a square is the size of the pane it ends up in. Panes without a number can be any allowed size.", ex: { map: ["aab", "cab", "ccb"], numbers: [[0, 0, 3], [2, 2, 3]] } },
+  dots: { name: "Dots", text: "Every pane holds exactly one dot: never none, never two.", ex: { map: ["aab", "acb", "ccb"], dots: [[0, 0], [2, 1], [1, 2]] } },
+  balance: { name: "Grey squares", text: "Every pane is half grey, half white, so every pane has an even number of squares.", ex: { map: ["aab", "ccb"], shades: [[0, 0], [2, 1], [1, 1]] } },
+  rect: { name: "Rectangles", text: "Every pane is a rectangle. Squares and straight bars count.", ex: { map: ["aab", "ccb"] } },
+  norect: { name: "No rectangles", text: "No pane is a rectangle, so no squares and no straight bars.", ex: { map: ["aab", "abb"] } },
+  symmetric: { name: "Symmetrical", text: "Every pane matches its own mirror image, across a vertical, horizontal or diagonal line.", ex: { map: ["aaa", "bab", "bbb"] } },
+  no2x2: { name: "No 2×2 blocks", text: "No four squares of one pane form a 2×2 square.", ex: { map: ["aab", "abb", "ccc"] } },
+  edge: { name: "Touch the frame", text: "Every pane reaches the outer frame (or the edge of a hole). None can be shut in the middle.", ex: { map: ["aab", "ccb"] } },
+  distinct: { name: "All different shapes", text: "No two panes are the same shape. Turned or flipped copies count as the same shape.", ex: { map: ["aabb", "acbb"] } },
+  same: { name: "All the same shape", text: "Every pane is the same shape (turned or flipped is fine). You have to work out which shape.", ex: { map: ["aabb", "ccdd"] } },
+  distinctsize: { name: "All different sizes", text: "No two panes have the same number of squares.", ex: { map: ["aaa", "bcc"] } },
+  count: { name: "Pane count", text: "The window is split into exactly this many panes.", ex: { map: ["aab", "ccb"] } },
+  nbsize: { name: "Neighbours differ in size", text: "Two panes that share a side can't have the same number of squares.", ex: { map: ["aaa", "bcc"] } },
+  nbshape: { name: "Neighbours differ in shape", text: "Two panes that share a side can't be the same shape.", ex: { map: ["aaa", "bcc"] } },
+  nocross: { name: "Lines never cross", text: "Nowhere do four panes meet at one corner, so lines meet in T's and L's, never in a +. A red dot marks a crossing.", ex: { map: ["aabb", "ccbd"] } },
+};
+const helpKey = (t) => (t === "sizes" ? "size" : t);
+function exampleCanvas(ex, s = 13) {
+  const H = ex.map.length, W = ex.map[0].length, cv = document.createElement("canvas"), dpr = window.devicePixelRatio || 1, pad = 2;
+  cv.width = (W * s + pad * 2) * dpr; cv.height = (H * s + pad * 2) * dpr; cv.style.width = (W * s + pad * 2) + "px"; cv.style.height = (H * s + pad * 2) + "px";
+  const c = cv.getContext("2d"); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const T = C.dark ? TINTS_D : TINTS_L, at = (x, y) => (ex.map[y] || "")[x], shade = new Set((ex.shades || []).map(([x, y]) => key(x, y)));
+  const letters = [...new Set(ex.map.join(""))];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    c.fillStyle = T[letters.indexOf(at(x, y)) * 3 % T.length]; c.fillRect(pad + x * s, pad + y * s, s, s);
+    if (shade.has(key(x, y))) { c.fillStyle = C.dark ? "rgba(0,0,0,.4)" : "rgba(0,0,0,.18)"; c.fillRect(pad + x * s, pad + y * s, s, s); }
+  }
+  c.strokeStyle = C.wall; c.lineCap = "round"; c.lineWidth = 1.6; c.beginPath();
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (x + 1 < W && at(x, y) !== at(x + 1, y)) { c.moveTo(pad + (x + 1) * s, pad + y * s); c.lineTo(pad + (x + 1) * s, pad + (y + 1) * s); }
+    if (y + 1 < H && at(x, y) !== at(x, y + 1)) { c.moveTo(pad + x * s, pad + (y + 1) * s); c.lineTo(pad + (x + 1) * s, pad + (y + 1) * s); }
+  }
+  c.stroke(); c.lineWidth = 2; c.strokeRect(pad, pad, W * s, H * s);
+  c.fillStyle = C.ink;
+  for (const [x, y] of ex.dots || []) { c.beginPath(); c.arc(pad + (x + .5) * s, pad + (y + .5) * s, 2.2, 0, Math.PI * 2); c.fill(); }
+  c.font = `600 ${Math.round(s * .62)}px Inter, system-ui, sans-serif`; c.textAlign = "center"; c.textBaseline = "middle";
+  for (const [x, y, n] of ex.numbers || []) c.fillText(n, pad + (x + .5) * s, pad + (y + .5) * s + .5);
+  return cv;
+}
+let helpOpenedOnStart = false;
+function openHelp(ruleType) {
+  closePop(); closeHintMenu();
+  const here = new Set(P ? P.rules.map((r) => helpKey(r.type)) : []);
+  const order = ["shapes", "size", "numbers", "dots", "balance", "rect", "norect", "symmetric", "no2x2", "edge", "distinct", "same", "distinctsize", "count", "nbsize", "nbshape", "nocross"];
+  $("#modalSlot").innerHTML = `<div class="scrim" id="helpScrim"><div class="card help-card" role="dialog" aria-modal="true" aria-label="Rules and help">
+    <h3>How to play</h3>
+    <p>Split the whole window into <b>panes</b> so that every rule listed for the level is true. Each level has exactly one answer, which you can find by logic alone.</p>
+    <h4>The basics</h4>
+    <ul>
+      <li>A <b>pane</b> is a group of squares joined side by side, closed in by lines and the frame.</li>
+      <li><b>Every line must separate two different panes.</b> A line can't stop in the middle of a pane, like a divider inside one pane. A line like that shows <b>dashed</b>, and the pane won't count until you remove it or finish it.</li>
+      <li><b>Heavy lines</b> that come with a level are part of the puzzle. They're in the right place already and can't be removed.</li>
+      <li>Shapes that are turned or flipped count as the <b>same shape</b>.</li>
+      <li>A pane turns to <b>coloured glass</b> once it follows all the pane rules. <b>Red</b> means a clash you need to fix, like two touching panes the same size.</li>
+      <li>The small number in a region's corner is its size, to help you count.</li>
+    </ul>
+    <h4>Controls</h4>
+    <ul>
+      <li><b>Boxes</b> (B): drag across squares to make a pane, or tap squares and press <b>Make pane</b>. Tap a coloured pane to undo it.</li>
+      <li><b>Lines</b> (L): drag along grid lines to draw, drag over lines to erase, tap a line to toggle it.</li>
+      <li><b>Marks</b> (M): tap a grid line to put a ✕ on it, a note to yourself that no line goes there.</li>
+      <li><b>Hint</b>: <i>Show one pane</i> (H) draws in a pane of the answer. <i>Check my lines</i> (C) flashes any of your lines that are wrong. Both count as hints.</li>
+      <li><b>Undo</b> (Z), <b>Clear</b> (which also lets you replay a solved level), and the grid button for <b>all levels</b>. Press <b>?</b> to open this page.</li>
+    </ul>
+    <h4>All the rules</h4>
+    <div class="glossary">${order.map((t) => `<div class="gl" id="gl-${t}"><span class="ex" data-t="${t}"></span><div><b>${HELP[t].name}${here.has(t) ? ' <small style="color:var(--accent);font-weight:600">· in this level</small>' : ""}</b><span>${HELP[t].text}</span></div></div>`).join("")}</div>
+    <div class="btns" style="margin-top:18px;justify-content:flex-end"><button class="btn primary" id="helpClose">Got it</button></div></div></div>`;
+  document.querySelectorAll("#helpScrim .ex").forEach((el) => el.appendChild(exampleCanvas(HELP[el.dataset.t].ex)));
+  const close = () => { store.set("gk-help-seen", 1); $("#modalSlot").innerHTML = ""; };
+  $("#helpClose").onclick = close;
+  $("#helpScrim").addEventListener("click", (e) => { if (e.target.id === "helpScrim") close(); });
+  if (ruleType) { const el = $("#gl-" + helpKey(ruleType)); if (el) { el.scrollIntoView({ block: "center" }); el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1600); } }
+}
+$("#helpBtn").onclick = () => openHelp();
+
+/* New-rule card: the first time a level uses a rule you haven't met yet */
+const SEEN = new Set(store.get("gk-seen") || []);
+if (!store.get("gk-seen")) {
+  ["shapes", "size", "count"].forEach((t) => SEEN.add(t));
+  // anyone already playing has met the rules of the levels before where they are
+  LEVELS.slice(0, Math.max(0, PROG.max - 1)).forEach((L) => L.rules.forEach((r) => SEEN.add(helpKey(r.type))));
+  store.set("gk-seen", [...SEEN]);
+}
+function showNewRule() {
+  const box = $("#newRule");
+  const fresh = P.rules.map((r) => helpKey(r.type)).filter((t) => HELP[t] && !SEEN.has(t));
+  if (!fresh.length) { box.innerHTML = ""; return; }
+  const t = fresh[0];
+  box.innerHTML = `<div class="newrule"><span class="ex"></span><div><span class="tag">New rule</span><b>${HELP[t].name}</b>${HELP[t].text}</div><button class="btn" id="newRuleOk">Got it</button></div>`;
+  box.querySelector(".ex").appendChild(exampleCanvas(HELP[t].ex, 12));
+  $("#newRuleOk").onclick = () => { SEEN.add(t); store.set("gk-seen", [...SEEN]); showNewRule(); };
+}
 
 /* ================= LEVEL PICKER ================= */
 const modalOpen = () => !!$("#modalSlot").firstChild;
@@ -840,21 +1026,25 @@ async function initAccounts() {
   paintAcct();
   if (!API_URL) return;
   if (ACC.name) { try { signedIn(await api("login", { username: ACC.name }), false); } catch (e) { setStatus("error"); } }
-  else if (!store.get("gk-login-seen")) setTimeout(openLogin, 700);
+  else if (!store.get("gk-login-seen") && !helpOpenedOnStart) setTimeout(() => { if (!modalOpen()) openLogin(); }, 700);
 }
 
 /* ================= START ================= */
 (function start() {
   store.del("gk-state"); store.del("gk-level"); // from the first version, whose boards were random
+  // solving the last level of an older, shorter set unlocks the levels added since
+  const solvedNums = Object.keys(PROG.best).map(Number).filter((n) => n >= 1 && n <= TOTAL);
+  PROG.max = Math.max(1, Math.min(TOTAL, Math.max(PROG.max, ...solvedNums.map((n) => n + 1))));
   saveProg();
   const cur = store.get("gk-current");
   loadLevel(unlocked(cur) ? cur : Math.min(TOTAL, PROG.max));
   setMode(mode);
+  if (!store.get("gk-help-seen") && !Object.keys(PROG.best).length) { openHelp(); helpOpenedOnStart = true; }
   initAccounts();
 })();
 
 // hooks for automated tests
-window.__game = { get s() { return { level, cells, P, walls, fixed, regions, evalState, CS, PAD, selection, PROG }; },
+window.__game = { get s() { return { level, cells, P, walls, fixed, marks, regions, evalState, CS, PAD, selection, PROG }; },
   loadLevel, setWalls(list) { walls = new Set(list.filter((e) => !fixed.has(e))); changed(); }, carve };
 })();
 </script>
